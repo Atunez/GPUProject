@@ -1,2 +1,2 @@
-long** compress(long*);
-long** decompress(long*);
+long* compress(long*, int);
+long* decompress(long*, int);

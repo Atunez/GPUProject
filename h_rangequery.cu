@@ -63,5 +63,27 @@ long* compress(long* bitvector, int number){
 
 long* decompress(long* bitvector, int number){
     // should be the reverse of compress...
-    
+    int todecomp = bitvector[0];
+    int i;
+    long * answer = (long*) Malloc(sizeof(long) * number);
+    int addat = 0;
+    for(i = 1; i < todecomp+1; i++){
+        if(bitvector[i] >> 63){
+            // if this vector is a fill..
+            int value = (bitvector[i] >> 62) & 0x1; // get the 63rd bit...
+            if(value) // if value was 1, it is actually just f...
+                value = 0xffffffffffffffff;
+            int amount =  bitvector[i] & 0x3fffffffffffffff; // clear off the last 2 bits..
+            int j = 0;
+            for(; j < amount; j++){
+                answer[addat] = value;
+                addat++;
+            }
+        }else{
+            // this is the boring case...
+            answer[addat] = bitvector[i] & 0x7fffffffffffffff;
+            addat++;
+        }
+    }
+    return answer;
 }
