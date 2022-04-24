@@ -1,7 +1,6 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <jpeglib.h>
 #include <jerror.h>
 #include "wrappers.h"
 #include "h_rangequery.h"
@@ -26,9 +25,14 @@ int main(int argc, char * argv[])
     } 
 
     int i, rows, range;
+    // read basic information...
     fscanf(f, "%d", &rows);
     fscanf(f, "%d", &range);
-    
+    // for(i = 0; i < rows; i++){
+
+    // }
+
+    testCompressDecompress();
 
 
     // //use the CPU to perform the greyscale
@@ -57,7 +61,7 @@ void parseCommandArgs(int argc, char * argv[], char ** fileNm)
     if (argc != 2) printUsage();
 
     int len = strlen(argv[1]);
-    if (strncmp(".geb", &argv[1][len - 4], 4) != 0) printUsage();
+    if (strncmp(".gen", &argv[1][len - 4], 4) != 0) printUsage();
 
     //stat function returns 1 if file does not exist
     if (stat(argv[1], &buffer)) printUsage();
