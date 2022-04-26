@@ -27,8 +27,7 @@ static __global__ void decompress(float*, float*, float*, float*, int);
  		being queried. 2d array reprsented as 1d array because
 		each element of the array is variable length.  
 	cSizes: array desciribing the size of each compressed col
-		in terms of number of 64 bit words. Is an exclusively 
-		scanned array. 
+		in terms of number of 64 bit words.  
 	dSizes: number of 64 bit words in the decompressed cols
  return,
 	R:	bitvector representing rows who match range query.
@@ -87,16 +86,25 @@ void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int
 */
 __global__ void decompress (float * cols, float * cSizes, float * dData, float dSize, int numCols) 
 {
-	int col = threadIdx.x;	// index into d_cols
+	int col = threadIdx.x;
+	float col_offset = 0;		
+	float * bitVec;
+	int i;
 
-	// TODO: for each col launch kernel to decompress it
-		// or the result to past results to create R
-	
-	// get pointer to i'th col
-	// get i'th col size
+	// compute pointer arithmetic
+	for(i = 0; i < col; i++)
+	{
+		col_offset += cSize[i]; 
+	}
+	// bitVec = pointer to cData to be processed by decomp kernel
+	bitVec = cols + offset;
 
+	// create grid and block according to cSize
+	dim3 gird = (ceil(1.0 * cSize[col]/THREADSPERBLOCK, 1, 1));
+	dim3 block = (THREADSPERBLOCK, 1, 1);
 
-	// TODO: return R
+	// launch decomp kernel
+	decomp<<<grid, block>>>(bitVec, cSize[col], dSize); 	
 }
 
 /*
@@ -110,6 +118,11 @@ __global__ void decompress (float * cols, float * cSizes, float * dData, float d
 */
 __global__ void decomp(float * cData, float cSize; float dSize)
 {
+	// debugging...
+	printf("cData[0]: %ul, cSize: %d, dSize: %ul\n", cData[0], cSize, dSize);
+
+//-------------------------
+
 	// TODO: for each 64-bit WAH word in cData check word type
 		// update DecompSize[index] with 1:lit or len:fill 
 			// PARALLIZATION OPPORTUNITY
