@@ -14,7 +14,8 @@
 #include "config.h"  //defines THREADSPERBLOCK
 #include "wrappers.h"
 
-static __global__ void decomp(float *, float, float);
+static __global__ void decomp(float*, float, float);
+static __global__ void decompress(float*, float*, float*, float*, int);
 
 /*
  Given an array of relevant cols (representing bins which
@@ -23,14 +24,75 @@ static __global__ void decomp(float *, float, float);
 
  params,
  	cols:   array of bitvectors representing bins of variable 
- 		being queried. 
+ 		being queried. 2d array reprsented as 1d array because
+		each element of the array is variable length.  
+	cSizes: array desciribing the size of each compressed col
+		in terms of number of 64 bit words
+	dSizes: number of 63 bit words in the decompressed cols
  return,
 	R:	bitvector representing rows who match range query.
 */
-float * d_decompress (float ** cols) 
+void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int numCols)
+{
+	float * R; 
+	float * d_cols; // 1d array representing the 2d array of compressed bins
+	float * d_cSizes;  
+	float * d_dData; // 1d array representing the 2d array of decompressed bins
+	float totalSize =  0;
+	int i;
+
+	// determine total size of cols (cData)
+	for(i = 0; i < numCols; i++) 
+	{
+		totalSize += cSize[i];
+	}
+	totalSize *= sizeof(float); 	// this is slightly over sized 
+					// because cSizes are num of 63 bit words
+
+	// malloc cData && dData
+	CHECK(cudaMalloc((void **) &d_cols, totalSize));
+	CHECK(cudaMalloc((void **) &d_dData, dSize * sizeof(float)));
+	// malloc cSizes
+	CHECK(cudaMalloc((void **) &d_cSizes, numCols * sizeof(float)));
+	// malloc R (same as dSize)
+	CHECK(cudaMalloc((void **) &R, dSize * sizeof(float)));
+
+	// copy cData over to device
+	CHECK(cudaMemCopy(d_cols, cols, totalSize, cudaMemcpyHostToDevice));
+	// copy cSizes over to device
+	CHECK(cudaMemCopy(d_cSizes, cSizes, numCols * sizeof(float), cudaMemcpyHostToDevice));
+
+	// make grid && block 
+	dim3 grid(1, 1, 1); 		// only need a few threads because this 
+	dim3 block(numCols, 1, 1);	// kernel will launch many more
+
+	// launch kernel decompress
+	decompress<<<grid, block>>>(d_cols, d_cSizes, d_dData, dSize, numCols);
+
+	// copy decompressed data back from device
+	CHECK(cudaMemCopy(dData, d_dData, dSize * sizeof(float)));
+
+	// cudaFree everything on device
+	CHECK(cudaFree(d_cols);
+	CHECK(cudaFree(d_cSizes);
+	CHECK(cudaFree(d_dData);
+}
+
+/*
+ Given pointer to array of WAH compressed bitvectors, decompress them
+ by launching decomp kernels.
+
+ params,
+	cols:	array of bitvectors with WAH 64 bit encoding
+*/
+__global__ void decompress (float ** cols) 
 {
 	// TODO: for each col launch kernel to decompress it
 		// or the result to past results to create R
+	
+	// get pointer to i'th col
+	// get i'th col size
+
 
 	// TODO: return R
 }
