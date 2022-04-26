@@ -117,10 +117,10 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 	cSize:	number of 64 bit words CData represents
 	dSize:	number of 64 bit words in orignal (decompressed) data 
 */
-__global__ void decomp(ulong * cData, ulong cSize; ulong dSize)
+__global__ void decomp(ulong * cData, ulong cSize, ulong dSize)
 {
 	// debugging...
-	printf("cData[0]: %ul, cSize: %d, dSize: %ul\n", cData[0], cSize, dSize);
+	printf("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
 
 //-------------------------
 

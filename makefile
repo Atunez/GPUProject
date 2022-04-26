@@ -7,7 +7,7 @@ CC = g++
 
 #Optimization flags: -O2 gets sent to host compiler; -Xptxas -O2 is for
 #optimizing PTX
-NVCCFLAGS = -c -O2 -Xptxas -O2 --compiler-options -Wall
+NVCCFLAGS = -c -O2 -Xptxas -O2 --compiler-options -Wall -rdc=true -lcudadevrt
 
 #Flags for debugging
 #NVCCFLAGS = -c -G --compiler-options -Wall --compiler-options -g
