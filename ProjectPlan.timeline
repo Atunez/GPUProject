@@ -1,0 +1,16 @@
+TODO: 
+------------
+
+1) Implement simple sequential encode and decode
+2) Implement parralel decode, Algo 1. 
+	- takes as input set of compressed bit vectors, Cols (only needed vectors for range query)
+	- use 64 bit words, WAH encoded
+3) Implement parralel decode, Algo 2.
+	- takes as input single compressed WAH vector, CData
+	- takes as input size of the WAH vector, CSize (number of 64 bit words CData represents)
+	- takes as input size of decompressed data, DSize (number of 64 bit words in original data)
+	- creates DecompSize array, (same size as CData)
+	* each thread manages one atom of compressed data (one WAH 64 bit word)
+	* optimal block size = (1024 x 1 x 1) 
+ 
+ 
