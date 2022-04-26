@@ -12,5 +12,5 @@ TODO:
 	- creates DecompSize array, (same size as CData)
 	* each thread manages one atom of compressed data (one WAH 64 bit word)
 	* optimal block size = (1024 x 1 x 1) 
- 
+	*  
  
