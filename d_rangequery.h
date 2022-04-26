@@ -1,2 +1,3 @@
-void d_decompress (float*, float*, float*, float*, int); // wrapper algo 1
+// wrapper for algo 1
+void d_decompress (unsigned long*, unsigned long*, unsigned long*, unsigned long*, int); 
 

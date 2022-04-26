@@ -20,11 +20,13 @@ OBJS = rangequery.o wrappers.o h_rangequery.o
 rangequery: $(OBJS)
 	$(CC) $(OBJS) -L/usr/local/cuda/lib64 -lcuda -lcudart -ljpeg -o rangequery
 
-rangequery.o: rangequery.cu wrappers.h h_rangequery.h 
+rangequery.o: rangequery.cu wrappers.h h_rangequery.h config.h 
 
-h_rangequery.o: h_rangequery.cu h_rangequery.h CHECK.h
+h_rangequery.o: h_rangequery.cu h_rangequery.h CHECK.h config.h
 
-wrappers.o: wrappers.cu wrappers.h
+d_rangequery.o: d_rangequery.cu d_rangequery.h CHECK.h config.h
+
+wrappers.o: wrappers.cu wrappers.h config.h
 
 clean:
 	rm rangequery *.o

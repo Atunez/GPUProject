@@ -5,6 +5,7 @@
   Implementing cool paper on range query
 */
 
+#include <math.h>
 #include <stdio.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,8 +15,8 @@
 #include "config.h"  //defines THREADSPERBLOCK
 #include "wrappers.h"
 
-static __global__ void decomp(float*, float, float);
-static __global__ void decompress(float*, float*, float*, float*, int);
+static __global__ void decomp(ulong*, ulong, ulong);
+static __global__ void decompress(ulong*, ulong*, ulong*, ulong, int);
 
 /*
  Given an array of relevant cols (representing bins which
@@ -32,34 +33,34 @@ static __global__ void decompress(float*, float*, float*, float*, int);
  return,
 	R:	bitvector representing rows who match range query.
 */
-void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int numCols)
+void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int numCols)
 {
-	float * R; 
-	float * d_cols; // 1d array representing the 2d array of compressed bins
-	float * d_cSizes;  
-	float * d_dData; // 1d array representing the 2d array of decompressed bins
-	float totalSize =  0;
+	ulong * R; 
+	ulong * d_cols; // 1d array representing the 2d array of compressed bins
+	ulong * d_cSizes;  
+	ulong * d_dData; // 1d array representing the 2d array of decompressed bins
+	ulong totalSize =  0;
 	int i;
 
 	// determine total size of cols (cData)
 	for(i = 0; i < numCols; i++) 
 	{
-		totalSize += cSize[i];
+		totalSize += cSizes[i];
 	}
-	totalSize *= sizeof(float); 
+	totalSize *= sizeof(ulong); 
 
 	// malloc cData && dData
 	CHECK(cudaMalloc((void **) &d_cols, totalSize));
-	CHECK(cudaMalloc((void **) &d_dData, dSize * sizeof(float)));
+	CHECK(cudaMalloc((void **) &d_dData, dSize * sizeof(ulong)));
 	// malloc cSizes
-	CHECK(cudaMalloc((void **) &d_cSizes, numCols * sizeof(float)));
+	CHECK(cudaMalloc((void **) &d_cSizes, numCols * sizeof(ulong)));
 	// malloc R (same as dSize)
-	CHECK(cudaMalloc((void **) &R, dSize * sizeof(float)));
+	CHECK(cudaMalloc((void **) &R, dSize * sizeof(ulong)));
 
 	// copy cData over to device
-	CHECK(cudaMemCopy(d_cols, cols, totalSize, cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(d_cols, cols, totalSize, cudaMemcpyHostToDevice));
 	// copy cSizes over to device
-	CHECK(cudaMemCopy(d_cSizes, cSizes, numCols * sizeof(float), cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(d_cSizes, cSizes, numCols * sizeof(ulong), cudaMemcpyHostToDevice));
 
 	// make grid && block 
 	dim3 grid(1, 1, 1); 		// only need a few threads because this 
@@ -69,12 +70,12 @@ void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int
 	decompress<<<grid, block>>>(d_cols, d_cSizes, d_dData, dSize, numCols);
 
 	// copy decompressed data back from device
-	CHECK(cudaMemCopy(dData, d_dData, dSize * sizeof(float)));
+	CHECK(cudaMemcpy(dData, d_dData, dSize * sizeof(ulong), cudaMemcpyDeviceToHost));
 
 	// cudaFree everything on device
-	CHECK(cudaFree(d_cols);
-	CHECK(cudaFree(d_cSizes);
-	CHECK(cudaFree(d_dData);
+	CHECK(cudaFree(d_cols));
+	CHECK(cudaFree(d_cSizes));
+	CHECK(cudaFree(d_dData));
 }
 
 /*
@@ -84,27 +85,27 @@ void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int
  params,
 	cols:	array of bitvectors with WAH 64 bit encoding
 */
-__global__ void decompress (float * cols, float * cSizes, float * dData, float dSize, int numCols) 
+__global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int numCols) 
 {
 	int col = threadIdx.x;
-	float col_offset = 0;		
-	float * bitVec;
+	ulong col_offset = 0;		
+	ulong * bitVec;
 	int i;
 
 	// compute pointer arithmetic
 	for(i = 0; i < col; i++)
 	{
-		col_offset += cSize[i]; 
+		col_offset += cSizes[i]; 
 	}
 	// bitVec = pointer to cData to be processed by decomp kernel
-	bitVec = cols + offset;
+	bitVec = cols + col_offset;
 
 	// create grid and block according to cSize
-	dim3 gird = (ceil(1.0 * cSize[col]/THREADSPERBLOCK, 1, 1));
-	dim3 block = (THREADSPERBLOCK, 1, 1);
+	dim3 grid(ceil(1.0 * cSizes[col]/THREADSPERBLOCK), 1, 1);
+	dim3 block(THREADSPERBLOCK, 1, 1);
 
 	// launch decomp kernel
-	decomp<<<grid, block>>>(bitVec, cSize[col], dSize); 	
+	decomp<<<grid, block>>>(bitVec, cSizes[col], dSize); 	
 }
 
 /*
@@ -116,7 +117,7 @@ __global__ void decompress (float * cols, float * cSizes, float * dData, float d
 	cSize:	number of 64 bit words CData represents
 	dSize:	number of 64 bit words in orignal (decompressed) data 
 */
-__global__ void decomp(float * cData, float cSize; float dSize)
+__global__ void decomp(ulong * cData, ulong cSize; ulong dSize)
 {
 	// debugging...
 	printf("cData[0]: %ul, cSize: %d, dSize: %ul\n", cData[0], cSize, dSize);
