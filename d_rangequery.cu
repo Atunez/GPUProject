@@ -27,8 +27,9 @@ static __global__ void decompress(float*, float*, float*, float*, int);
  		being queried. 2d array reprsented as 1d array because
 		each element of the array is variable length.  
 	cSizes: array desciribing the size of each compressed col
-		in terms of number of 64 bit words
-	dSizes: number of 63 bit words in the decompressed cols
+		in terms of number of 64 bit words. Is an exclusively 
+		scanned array. 
+	dSizes: number of 64 bit words in the decompressed cols
  return,
 	R:	bitvector representing rows who match range query.
 */
@@ -46,8 +47,7 @@ void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int
 	{
 		totalSize += cSize[i];
 	}
-	totalSize *= sizeof(float); 	// this is slightly over sized 
-					// because cSizes are num of 63 bit words
+	totalSize *= sizeof(float); 
 
 	// malloc cData && dData
 	CHECK(cudaMalloc((void **) &d_cols, totalSize));
@@ -85,8 +85,10 @@ void d_decompress (float * cols, float * cSizes, float * dData, float dSize, int
  params,
 	cols:	array of bitvectors with WAH 64 bit encoding
 */
-__global__ void decompress (float ** cols) 
+__global__ void decompress (float * cols, float * cSizes, float * dData, float dSize, int numCols) 
 {
+	int col = threadIdx.x;	// index into d_cols
+
 	// TODO: for each col launch kernel to decompress it
 		// or the result to past results to create R
 	
