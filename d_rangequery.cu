@@ -15,6 +15,7 @@
 #include "config.h"  //defines THREADSPERBLOCK
 #include "wrappers.h"
 
+// prototype for kernels
 static __global__ void decomp(ulong*, ulong, ulong);
 static __global__ void decompress(ulong*, ulong*, ulong*, ulong, int);
 
@@ -121,7 +122,15 @@ __global__ void decomp(ulong * cData, ulong cSize, ulong dSize)
 {
 	// debugging...
 	printf("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
+	
+	// create index in cData
+	uint cWordIndex = blockIdx.x * THREADSPERBLOCK + threadIdx.x;
 
+	// bounds checking
+	if (cWordIndex >= cSize) { return; }
+
+	
+	
 //-------------------------
 
 	// TODO: for each 64-bit WAH word in cData check word type
