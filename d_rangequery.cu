@@ -2,7 +2,7 @@
   Brady Adcock
   Abdel Issa 
 
-  Implementing cool paper on range query
+  Implementing cool paper on range query. 
 */
 
 #include <math.h>
@@ -37,9 +37,9 @@ static __global__ void decompress(ulong*, ulong*, ulong*, ulong, int);
 void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int numCols)
 {
 	ulong * R; 
-	ulong * d_cols; // 1d array representing the 2d array of compressed bins
+	ulong * d_cols; 	// 1d array representing the 2d array of compressed bins
 	ulong * d_cSizes;  
-	ulong * d_dData; // 1d array representing the 2d array of decompressed bins
+	ulong * d_dData; 	// 1d array representing the 2d array of decompressed bins
 	ulong totalSize =  0;
 	int i;
 
@@ -80,7 +80,7 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
 }
 
 /*
- Given pointer to array of WAH compressed bitvectors, decompress them
+ Given pointer to array of WAH bitvectors, decompress them
  by launching decomp kernels.
 
  params,
@@ -106,7 +106,7 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 	dim3 block(THREADSPERBLOCK, 1, 1);
 
 	// launch decomp kernel
-	decomp<<<grid, block>>>(bitVec, cSizes[col], dSize); 	
+	decomp<<<grid, block>>>(bitVec, cSizes[col], dData, dSize); 	
 }
 
 /*
@@ -118,7 +118,7 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 	cSize:	number of 64 bit words CData represents
 	dSize:	number of 64 bit words in orignal (decompressed) data 
 */
-__global__ void decomp(ulong * cData, ulong cSize, ulong dSize)
+__global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
 {
 	// debugging...
 	printf("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
@@ -129,8 +129,25 @@ __global__ void decomp(ulong * cData, ulong cSize, ulong dSize)
 	// bounds checking
 	if (cWordIndex >= cSize) { return; }
 
-	
-	
+	// create DecompSizes in shared mem, used to create StartingPoints array. 
+	__shared__ ulong decompSizes[cSize];
+	__shared__ ulong startingPoints[cSize];
+	// each 1 in EndPoints represents where  a hetero chenk was found
+	__shared__ char endPoints[dSize];
+	// WordIndex[i] stores the index to the atom in cData that contains the info for the i'th decomp'd word
+	__shared__ ulong wordIndex[dSize];
+
+	// check word type
+	if (CData[cWordIndex] >> 63 == 0) 
+	{
+		// literal atom
+		DecompSizes[cWordIndex] = 1;
+	} else {
+		// fill atom, (flag, value, len) : len, bits 0-62 = number clustered hetero chunks
+		DecompSizes[cWordIndex] = (CData[cWordIndex] << 2) >> 2;
+	}
+
+
 //-------------------------
 
 	// TODO: for each 64-bit WAH word in cData check word type
