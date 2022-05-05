@@ -56,8 +56,12 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
 	CHECK(cudaMalloc((void **) &d_dData, dSize * sizeof(ulong)));
 	// malloc cSizes
 	CHECK(cudaMalloc((void **) &d_cSizes, numCols * sizeof(ulong)));
+	// malloc decompSizes arry for decomp
+	// malloc endPoints array for decomp
+	//
 	// malloc R (same as dSize)
 	CHECK(cudaMalloc((void **) &R, dSize * sizeof(ulong)));
+	
 
 	// copy cData over to device
 	CHECK(cudaMemcpy(d_cols, cols, totalSize, cudaMemcpyHostToDevice));
@@ -122,8 +126,9 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 __global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
 {
 	// create DecompSizes in shared mem, used to create StartingPoints array. 
-	__shared__ ulong decompSizes[cSize];
-	__shared__ ulong startingPoints[cSize];
+	// 	- the cSize + 1 is for the sake of the following exclusive scan
+	__shared__ ulong decompSizes[cSize + 1];
+	__shared__ ulong * startingPoints;
 	// each 1 in EndPoints represents where  a hetero chunk was found
 	__shared__ char endPoints[dSize];
 	// WordIndex[i] stores the index to the atom in cData that contains the info for the i'th decomp'd word
@@ -142,20 +147,33 @@ __global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
 	if (cData[cWordIndex] >> 63 == 0) 
 	{
 		// literal atom
-		decompSizes[cWordIndex] = 1;
+		decompSizes[cWordIndex + 1] = 1;
 	} else {
 		// fill atom, (flag, value, len) : len, bits 0-62 = number clustered hetero chunks
-		decompSizes[cWordIndex] = (CData[cWordIndex] << 2) >> 2;
+		decompSizes[cWordIndex + 1] = (CData[cWordIndex] << 2) >> 2;
 	}
 
-	// exclusive scan of DecompSizes to create startingPoints
-	__syncthreads();
+	// exclusive scan of DecompSizes to create "startingPoints"
+	startingPoints = decompSizes;
+	startingPoints[0] = 0;
+	// using kogge-stone technique
+	ulong stride, temp;
+	for(stride = 1; stride < blockDim.x; stride *= 2)
+	{
+		__syncthreads();
+		if (threadIdx.x >= stride) { temp = startingPoints[threadIdx.x - stride]; }
+		__syncthreads();
+		if (threadIdx.x >= stride) { startingPoints[threadIdx.x] += temp; }
+	}
+
+	// calc the number of elemnts each thread has to set to 0 in endPoints
+	int i, workPerThread;
+	workPerThread = dSize/(THREADSPERBLOCK * gridDim.x) + 1;
+	for(i = 0; i < workPerThread, i++) { endPoints[cWordIndex + i] = 0; }
+
+	//  
 	
 //-------------------------
-
-	// TODO: create startingPoints array using exclusive scan of DecompSize[]
-
-	// TODO: create endPoints[dSize], init with 0's
 
 	// TODO: for each 64-bit WAH word in cData add entry into endPoints
 		// endPoints[startingPoints[i]-1] = 1

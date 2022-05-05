@@ -13,6 +13,7 @@ void parseCommandArgs(int, char **, char **);
 void printUsage();
 void compare(unsigned char * d_Pout, unsigned char * h_Pout, int size);
 void setBit(unsigned long &source, int position, int value);
+void printBins(int rows, int numBins, unsigned long ** cols);
 
 int main(int argc, char * argv[])
 {
@@ -29,14 +30,17 @@ int main(int argc, char * argv[])
     	int i, j, rows, range, numBins;
 	int rowID, rowVal, binIndex;
 	char rowName[200];
+
 	// gets num rows and range of col values from top of file
     	fscanf(f, "%d", &rows);
     	fscanf(f, "%d", &range);
-	numBins = range/BINSIZE;
-	unsigned long cols[numBins][(rows/63) + 1];
+
+	// the number of unsigned longs required to represnt bitvetor of a col
+	int dSize = (rows-1)/63 + 1;	numBins = range/BINSIZE;
+	unsigned long cols[numBins][dSize];
 	
 	printf("rows = %d, range = %d\n", rows, range);
-	printf("cols[%d][%d]\n", numBins, ((rows-1)/63) + 1);
+	printf("cols[%d][%d]\n", numBins, dSize);
 
     	// bin the column data 
     	for(i = 0; i < rows; i++){
@@ -60,16 +64,25 @@ int main(int argc, char * argv[])
 		}
     	}
 	
-	for(j = 0; j < (rows-1)/63 + 1; j++){
-		for(i = 0; i < numBins; i++){
-			printf("%lx ", cols[i][j]);
-		}
-		printf("\n");
-	}
-
     	testCompressDecompress();
 	testCompressDecompress2(&cols[i][j], 1);
 
+	// testing GPU access to compressed words
+	
+	// number of unsigned longs used to compress a col. 
+	unsigned long numCWords;
+	// compressed cols
+	unsigned long * cData;
+
+	cData = compress(&cols[i][0], dSize);
+	numCWords = cData[0];
+	
+	printf("numCWords: %lu\n", numCWords);
+
+	for(i = 1; i < numCWords + 1; i++) 
+	{
+		printf("%lx\n", cData[i]);
+	}
 
     // //use the CPU to perform the greyscale
     // unsigned char * h_Pout; 
@@ -89,6 +102,18 @@ int main(int argc, char * argv[])
     // printf("Speedup: %f\n", cpuTime/gpuTime);
     return EXIT_SUCCESS;
 }
+
+void printBins(int rows, int numBins, unsigned long ** cols)
+{
+	int i, j;
+	for(j = 0; j < (rows-1)/63 + 1; j++){
+		for(i = 0; i < numBins; i++){
+			printf("%lx \n", cols[i][j]);
+		}
+		printf("\n---63 rows---\n");
+	}
+}
+
 
 void setBit(unsigned long &source, int position, int value)
 {

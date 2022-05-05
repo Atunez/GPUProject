@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-long unsigned* compress(long unsigned* bitvector, int number){
-    long unsigned* answer = (long unsigned*) malloc(sizeof(long unsigned) * number); // at worst, we don't compress...'
+long unsigned* compress(long unsigned* bitvector, int number)
+{
+    // worst case no copmression
+    long unsigned* answer = (long unsigned*) malloc(sizeof(long unsigned) * number); 
     int i;
     for(i = 0; i < number; i++){
         // we should do the compression here...
@@ -73,7 +75,8 @@ long unsigned* compress(long unsigned* bitvector, int number){
     return answer;
 }
 
-long unsigned* decompress(long unsigned* bitvector, int number){
+long unsigned* decompress(long unsigned* bitvector, int number)
+{
     // should be the reverse of compress...
     int todecomp = bitvector[0];
     long i;
@@ -100,8 +103,12 @@ long unsigned* decompress(long unsigned* bitvector, int number){
     return answer;
 }
 
-void testCompressDecompress(){
-    long unsigned int randomnumbers[] = {0x0, 0x0, 0x7fffffffffffffff, 0x7fffffffffffffff, 0x0, 0x0000027592351768, 0x1ffffffffffffff1};
+void testCompressDecompress()
+{
+    long unsigned int randomnumbers[] = {0x0, 			0x0, 
+					 0x7fffffffffffffff, 	0x7fffffffffffffff, 
+					 0x0, 			0x0000027592351768, 
+					 0x1ffffffffffffff1};
     int number = 7;
     long unsigned int* totest = randomnumbers;
     // temp should be: 0x80.........02, 0xc0.....02, 0x80.....01, ....
