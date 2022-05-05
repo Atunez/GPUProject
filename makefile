@@ -18,7 +18,7 @@ OBJS = rangequery.o wrappers.o h_rangequery.o
 	$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $< -o $@
 
 rangequery: $(OBJS)
-	$(CC) $(OBJS) -L/usr/local/cuda/lib64 -lcuda -lcudart -ljpeg -o rangequery
+	$(NVCC) $(OBJS) -L/usr/local/cuda/lib64 -lcuda -lcudart -ljpeg -o rangequery
 
 rangequery.o: rangequery.cu wrappers.h h_rangequery.h config.h 
 

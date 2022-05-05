@@ -120,3 +120,20 @@ void testCompressDecompress(){
     }
     printf("Test compression passed...\n");
 }
+
+void testCompressDecompress2(unsigned long * bitVector, int size){
+    long unsigned int* temp = compress(bitVector, size);
+    int i;
+    // for(i = 0; i < (int) temp[0]+1; i++){
+    //     printf("%lx \n", temp[i]);
+    // }
+    long unsigned int* output = decompress(temp, size);
+    
+    for(i = 0; i < size; i++){
+        if(output[i] != bitVector[i]){
+            printf("Test failed at index: %d, original: %lx, decompressed: %lx\n", i, bitVector[i], output[i]);
+            exit(EXIT_FAILURE);
+        }
+    }
+    printf("Test compression passed...\n");
+}

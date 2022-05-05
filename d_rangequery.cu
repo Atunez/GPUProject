@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <cuda_runtime.h>
 #include "CHECK.h"
+#include "DEBUG.h"
 #include "d_rangequery.h"
 #include "config.h"  //defines THREADSPERBLOCK
 #include "wrappers.h"
@@ -83,7 +84,7 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
  Given pointer to array of WAH bitvectors, decompress them
  by launching decomp kernels.
 
- params,
+ params,	
 	cols:	array of bitvectors with WAH 64 bit encoding
 */
 __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int numCols) 
@@ -120,39 +121,37 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 */
 __global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
 {
-	// debugging...
-	printf("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
-	
+	// create DecompSizes in shared mem, used to create StartingPoints array. 
+	__shared__ ulong decompSizes[cSize];
+	__shared__ ulong startingPoints[cSize];
+	// each 1 in EndPoints represents where  a hetero chunk was found
+	__shared__ char endPoints[dSize];
+	// WordIndex[i] stores the index to the atom in cData that contains the info for the i'th decomp'd word
+	__shared__ ulong wordIndex[dSize];	
+
 	// create index in cData
 	uint cWordIndex = blockIdx.x * THREADSPERBLOCK + threadIdx.x;
 
 	// bounds checking
 	if (cWordIndex >= cSize) { return; }
 
-	// create DecompSizes in shared mem, used to create StartingPoints array. 
-	__shared__ ulong decompSizes[cSize];
-	__shared__ ulong startingPoints[cSize];
-	// each 1 in EndPoints represents where  a hetero chenk was found
-	__shared__ char endPoints[dSize];
-	// WordIndex[i] stores the index to the atom in cData that contains the info for the i'th decomp'd word
-	__shared__ ulong wordIndex[dSize];
-
+	// debugging...
+	PRINTONCE("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
+	
 	// check word type
-	if (CData[cWordIndex] >> 63 == 0) 
+	if (cData[cWordIndex] >> 63 == 0) 
 	{
 		// literal atom
-		DecompSizes[cWordIndex] = 1;
+		decompSizes[cWordIndex] = 1;
 	} else {
 		// fill atom, (flag, value, len) : len, bits 0-62 = number clustered hetero chunks
-		DecompSizes[cWordIndex] = (CData[cWordIndex] << 2) >> 2;
+		decompSizes[cWordIndex] = (CData[cWordIndex] << 2) >> 2;
 	}
 
-
+	// exclusive scan of DecompSizes to create startingPoints
+	__syncthreads();
+	
 //-------------------------
-
-	// TODO: for each 64-bit WAH word in cData check word type
-		// update DecompSize[index] with 1:lit or len:fill 
-			// PARALLIZATION OPPORTUNITY
 
 	// TODO: create startingPoints array using exclusive scan of DecompSize[]
 
