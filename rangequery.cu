@@ -6,7 +6,6 @@
 #include "h_rangequery.h"
 
 #define CHANNELS 3
-#define BINSIZE 10
 
 //prototypes for functions in this file 
 void parseCommandArgs(int, char **, char **);
@@ -27,27 +26,61 @@ int main(int argc, char * argv[])
         exit(EXIT_FAILURE);
     } 
 
-    	int i, j, rows, range, numBins;
+    int i, j, rows, range;
 	int rowID, rowVal, binIndex;
-	char rowName[200];
+	int argCnt = 0;
 
 	// gets num rows and range of col values from top of file
-    	fscanf(f, "%d", &rows);
-    	fscanf(f, "%d", &range);
+	argCnt += fscanf(f, "%d", &rows);
+	argCnt += fscanf(f, "%d", &range);
 
-	// the number of unsigned longs required to represnt bitvetor of a col
-	int dSize = (rows-1)/63 + 1;	numBins = range/BINSIZE;
-	unsigned long cols[numBins][dSize];
+	if(argCnt != 2){
+		printf("Can't Read Start of .gen File :(");
+		return EXIT_FAILURE;
+	}
+
+	argCnt = 0;
+
+	// We will assume that we have a multiple of 63 to make life easier
+	// figure out how many words we need to represent the data vertically.
+	// Ie, if this is 10, then we need 10 uls for 1 column, ie, we have 630 elements
+	int numOfWords = rows/63; 
+	// figure out how many bins we have
+	int numBins = range/BINSIZE;
+	// make an array to story all the data...
+	unsigned long cols[numBins][numOfWords];
+	unsigned long ** realCols = (unsigned long **) Malloc(numBins * sizeof(sizeof(unsigned long) * numOfWords));
+
+	// every row has its label, which we will need for later...
+	// but, for cols[i][j], its label should be 
+	// 0 1 0
+	// 1 0 0
+	// 0 0 1
+	char ** labels = (char **) Malloc(sizeof(11 * sizeof(char)) * rows);
+	unsigned long basic_values[rows];
 	
 	printf("rows = %d, range = %d\n", rows, range);
-	printf("cols[%d][%d]\n", numBins, dSize);
+	printf("cols[%d][%d]\n", numBins, numOfWords);
 
-    	// bin the column data 
-    	for(i = 0; i < rows; i++){
+	// bin the column data 
+	for(i = 0; i < rows; i++){
 		// parse row data from file
-		fscanf(f, "%d", &rowID);
-		fscanf(f, "%s", rowName);
-		fscanf(f, "%d", &rowVal);
+		// argCnt += fscanf(f, "%d", &rowID);
+		// argCnt += fscanf(f, "%s", labels[i]);
+		// argCnt += fscanf(f, "%d", &rowVal);
+		
+		char* label = (char *) Malloc(sizeof(char) * 11);
+		argCnt = fscanf(f, "%d %s %d", &rowID, label, &rowVal);
+		labels[i] = label;
+		basic_values[rowID] = rowVal;
+
+		if(argCnt != 3){
+			printf("Can't Read Start of .gen File, in loop :( %d", argCnt);
+			return EXIT_FAILURE;
+		}
+
+		argCnt = 0;
+
 		//printf("row %d, %s, has val %d\n", rowID, rowName, rowVal);
 
 		// decide which bin to fill
@@ -62,27 +95,52 @@ int main(int argc, char * argv[])
 				setBit(cols[j][i/63], (i % 63) + 1, 0);
 			}
 		}
-    	}
-	
-    	testCompressDecompress();
-	testCompressDecompress2(&cols[i][j], 1);
-
-	// testing GPU access to compressed words
-	
-	// number of unsigned longs used to compress a col. 
-	unsigned long numCWords;
-	// compressed cols
-	unsigned long * cData;
-
-	cData = compress(&cols[i][0], dSize);
-	numCWords = cData[0];
-	
-	printf("numCWords: %lu\n", numCWords);
-
-	for(i = 1; i < numCWords + 1; i++) 
-	{
-		printf("%lx\n", cData[i]);
 	}
+
+	// Answers a query directly O(nk)
+	// k is length of bins of interest
+	// n is the number of rows
+	int binsOfInterest[4] = {0,3,5,7};
+	simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
+
+	int k;
+	for(k = 0; k < numBins; k++){
+		realCols[k] = cols[k];
+	}
+
+	for(k = 0; k < numOfWords; k++){
+		printf("%lx \n", realCols[0][k]);
+	}
+	
+	long unsigned* temp = COA(realCols, numBins, numOfWords);
+
+	for(k = 0; k < numOfWords; k++){
+		printf("%lx \n", temp[k]);
+	}
+	
+	// for label[i] it goes to cols[X][i/63] 
+
+	// testCompressDecompress();
+	// printf("%lx\n", cols[0][0]);
+	// testCompressDecompress(&cols[0][0], 1);
+	// testCompressDecompress(cols[0], numOfWords);
+
+	// // testing GPU access to compressed words
+	
+	// // number of unsigned longs used to compress a col. 
+	// unsigned long numCWords;
+	// // compressed cols
+	// unsigned long * cData;
+
+	// cData = compress(cols[0], numOfWords);
+	// numCWords = cData[0];
+	
+	// printf("numCWords: %lu\n", numCWords);
+
+	// for(i = 1; i < numCWords + 1; i++) 
+	// {
+	// 	printf("%lx\n", cData[i]);
+	// }
 
     // //use the CPU to perform the greyscale
     // unsigned char * h_Pout; 
@@ -113,6 +171,7 @@ void printBins(int rows, int numBins, unsigned long ** cols)
 		printf("\n---63 rows---\n");
 	}
 }
+
 
 
 void setBit(unsigned long &source, int position, int value)
