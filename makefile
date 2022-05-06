@@ -30,3 +30,4 @@ wrappers.o: wrappers.cu wrappers.h config.h
 
 clean:
 	rm rangequery *.o
+	rm *.o

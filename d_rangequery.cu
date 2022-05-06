@@ -17,8 +17,8 @@
 #include "wrappers.h"
 
 // prototype for kernels
-static __global__ void decomp(ulong*, ulong, ulong);
-static __global__ void decompress(ulong*, ulong*, ulong*, ulong, int);
+static __global__ void decomp(ulong*, ulong, ulong, ulong*, ulong*, ulong*, ulong*);
+static __global__ void decompress(ulong*, ulong*, ulong*, ulong, int, ulong*, ulong*, ulong*, ulong*);
 
 /*
  Given an array of relevant cols (representing bins which
@@ -41,15 +41,24 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
 	ulong * d_cols; 	// 1d array representing the 2d array of compressed bins
 	ulong * d_cSizes;  
 	ulong * d_dData; 	// 1d array representing the 2d array of decompressed bins
-	ulong totalSize =  0;
-	int i;
 
+	// following mem is only used in decomp
+	ulong * d_decompSizes;
+	ulong * d_startingPoints;
+	ulong * d_endPoints;
+	ulong * d_wordIndex;
+
+	ulong cTotalSize = 0;
+	ulong dTotalSize = 0; // size used for endPoints and WordIndex
+	int i;
 	// determine total size of cols (cData)
 	for(i = 0; i < numCols; i++) 
 	{
-		totalSize += cSizes[i];
+		cTotalSize += cSizes[i];
+		dTotalSize += dSize;
 	}
-	totalSize *= sizeof(ulong); 
+	cTotalSize *= sizeof(ulong); 
+	dTotalSize *= sizeof(ulong);
 
 	// malloc cData && dData
 	CHECK(cudaMalloc((void **) &d_cols, totalSize));
@@ -57,8 +66,13 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
 	// malloc cSizes
 	CHECK(cudaMalloc((void **) &d_cSizes, numCols * sizeof(ulong)));
 	// malloc decompSizes arry for decomp
+	CHECK(cudaMalloc((void **) &d_decompSizes, cSize * sizeof(ulong)));
+	// malloc startingPoints array for decomp
+	CHECK(cudaMalloc((void **) &d_startingPoints, (cSize + 1) * sizeof(ulong)));
 	// malloc endPoints array for decomp
-	//
+	CHECK(cudaMalloc((void **) &d_endPoints, dSize * sizeof(char)));
+	// malloc wordIndex for decomp, dSize 
+	CHECK(cudaMalloc((void **) &d_wordIndex, (dSize + 1) * sizeof(ulong)));
 	// malloc R (same as dSize)
 	CHECK(cudaMalloc((void **) &R, dSize * sizeof(ulong)));
 	
@@ -73,7 +87,8 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
 	dim3 block(numCols, 1, 1);	// kernel will launch many more
 
 	// launch kernel decompress
-	decompress<<<grid, block>>>(d_cols, d_cSizes, d_dData, dSize, numCols);
+	decompress<<<grid, block>>>(d_cols, d_cSizes, d_dData, dSize, numCols, d_decompSizes,
+				    d_startingPoints, d_endPoints, d_wordIndex);
 
 	// copy decompressed data back from device
 	CHECK(cudaMemcpy(dData, d_dData, dSize * sizeof(ulong), cudaMemcpyDeviceToHost));
@@ -82,6 +97,10 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
 	CHECK(cudaFree(d_cols));
 	CHECK(cudaFree(d_cSizes));
 	CHECK(cudaFree(d_dData));
+	CHECK(cudaFree(d_decompSizes));
+	CHECK(cudaFree(d_startingPoints));
+	CHECK(cudaFree(d_endPoints));
+	CHECK(cudaFree(d_wordIndex));
 }
 
 /*
@@ -91,7 +110,8 @@ void d_decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int
  params,	
 	cols:	array of bitvectors with WAH 64 bit encoding
 */
-__global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int numCols) 
+__global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong dSize, int numCols,
+			    ulong * decompSizes, ulong * startingPoints, ulong * endPoints, ulong * wordIndex) 
 {
 	int col = threadIdx.x;
 	ulong col_offset = 0;		
@@ -110,8 +130,23 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 	dim3 grid(ceil(1.0 * cSizes[col]/THREADSPERBLOCK), 1, 1);
 	dim3 block(THREADSPERBLOCK, 1, 1);
 
+	// set-up decompSizes array
+
+
+// --- gonna have to break up decomp into a few different kernels --- 
+	// 1) make DecompSizes
+	// 2) make StartingPoints (scan DecompSizes)
+	// 3) create EndPoints and fill it with useful data
+	// 4) make WordIndex (scan EndPoints)
+	// 5) fill dData (using WordIndex).
+
+	
+
+
 	// launch decomp kernel
 	decomp<<<grid, block>>>(bitVec, cSizes[col], dData, dSize); 	
+	__syncthreads();
+
 }
 
 /*
@@ -123,7 +158,8 @@ __global__ void decompress (ulong * cols, ulong * cSizes, ulong * dData, ulong d
 	cSize:	number of 64 bit words CData represents
 	dSize:	number of 64 bit words in orignal (decompressed) data 
 */
-__global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
+__global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize, 
+		       ulong * decompSizes, ulong * startingPoints, ulong * endPoints, ulong * wordIndex)
 {
 	// create DecompSizes in shared mem, used to create StartingPoints array. 
 	// 	- the cSize + 1 is for the sake of the following exclusive scan
@@ -141,7 +177,7 @@ __global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
 	if (cWordIndex >= cSize) { return; }
 
 	// debugging...
-	PRINTONCE("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
+	//PRINTONCE("cData[0]: %lu, cSize: %lu, dSize: %lu\n", cData[0], cSize, dSize);
 	
 	// check word type
 	if (cData[cWordIndex] >> 63 == 0) 
@@ -153,12 +189,13 @@ __global__ void decomp(ulong * cData, ulong cSize, ulong * dData, ulong dSize)
 		decompSizes[cWordIndex + 1] = (CData[cWordIndex] << 2) >> 2;
 	}
 
+
 	// exclusive scan of DecompSizes to create "startingPoints"
 	startingPoints = decompSizes;
 	startingPoints[0] = 0;
 	// using kogge-stone technique
 	ulong stride, temp;
-	for(stride = 1; stride < blockDim.x; stride *= 2)
+	for(stride = 1; stride < cSize; stride *= 2)
 	{
 		__syncthreads();
 		if (threadIdx.x >= stride) { temp = startingPoints[threadIdx.x - stride]; }

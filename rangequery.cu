@@ -36,7 +36,8 @@ int main(int argc, char * argv[])
     	fscanf(f, "%d", &range);
 
 	// the number of unsigned longs required to represnt bitvetor of a col
-	int dSize = (rows-1)/63 + 1;	numBins = range/BINSIZE;
+	int dSize = (rows-1)/63 + 1;	
+	numBins = range/BINSIZE;
 	unsigned long cols[numBins][dSize];
 	
 	printf("rows = %d, range = %d\n", rows, range);
