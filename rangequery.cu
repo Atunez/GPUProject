@@ -103,17 +103,22 @@ int main(int argc, char * argv[])
 	int binsOfInterest[4] = {0,3,5,7};
 	simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
 
-	int k;
-	for(k = 0; k < numBins; k++){
-		realCols[k] = cols[k];
-	}
+	// int k;
+	// for(k = 0; k < numBins; k++){
+	// 	realCols[k] = cols[k];
+	// }
 
-	for(k = 0; k < numOfWords; k++){
-		printf("%lx \n", realCols[0][k]);
-	}
+	realCols[0] = cols[0];
+	realCols[1] = cols[3];
+	realCols[2] = cols[5];
+	realCols[3] = cols[7];
+	// for(k = 0; k < numOfWords; k++){
+	// 	printf("%lx \n", realCols[0][k]);
+	// }
 	
-	long unsigned* temp = COA(realCols, numBins, numOfWords);
+	long unsigned* temp = COA(realCols, 4, numOfWords);
 
+	int k;
 	for(k = 0; k < numOfWords; k++){
 		printf("%lx \n", temp[k]);
 	}
