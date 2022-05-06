@@ -368,8 +368,8 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 
 
 	// // We can now do stuff on d_decompData...
-	// d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
-	// cudaDeviceSynchronize();
+	d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
+	cudaDeviceSynchronize();
 
 	CHECK(cudaMemcpy(result, d_decompData, sizeof(unsigned long)*numOfRows*numOfCols, cudaMemcpyDeviceToHost));
 	// We are not timing for now...
