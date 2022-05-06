@@ -16,6 +16,7 @@
 #include "wrappers.h"
 #include "NEXTPOW2.h"
 
+
 // prototype for kernels
 // __global__ void decompress (ulong *, ulong *, ulong *, ulong, int, ulong *, ulong *, ulong *);
 // static __global__ void makeDecompSizes(ulong*, ulong, ulong*);
@@ -321,14 +322,41 @@ static __global__ void d_COAKernel(unsigned long* decompData, int numOfRows, int
 
 // Functions called from GPU
 static __device__ void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSize, int start, unsigned long* output);
-static __device__ void d_badExclusiveScan(unsigned long* decompData, int* output, int decompDataSize);
+static __device__ void d_ExclusiveScan(unsigned long* decompData, unsigned long* output, int decompDataSize);
 
 // Debugging Function
 static __device__ void printUlongArray(unsigned long* array, int startIdx, int length);
 
 
-// Global vars...
-long unsigned*  ulNumOfRows;
+long unsigned* organizeData(unsigned long** compData, int numOfCols, int numOfRows){
+	// CPU to change how the data is given and make our life easier...
+	// Currently, compData[i] contains two parts. We wish to merge them and make everything easier...
+	// We will still give the guarantee that each chunk is numOfRows+1 away from the next
+
+	long unsigned* output = (long unsigned*) Malloc(numOfCols*(numOfRows+1) * sizeof(unsigned long));
+
+	int totalSoFar = 0;
+	int lastWrittenTo = 1;
+	int lastChunkUpdate = 0;
+	for(int i = 0; i < numOfCols; i++){
+		// if we can write data to this chunk still...
+		if(totalSoFar + compData[i][0] < THREADSPERBLOCK){
+			for(int j = 1; j < 1+compData[i][0]; j++){
+				output[lastWrittenTo] = compData[i][j];
+				lastWrittenTo++;
+			}
+			output[lastChunkUpdate] += compData[i][0];
+		}else{
+			// The addition of this column will bring the number to something scuffed...
+			// We will redo this as if we started at a new block...
+			lastChunkUpdate = lastWrittenTo;
+			lastWrittenTo++;
+			i--;
+		}
+	}
+
+	return output;
+}
 
 // method that is called by CPU
 // for now do decomp...
@@ -340,8 +368,9 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// compData[0] = length of data
 	// compData[1] is actual results...
 
+	// We will flatten the data, but to every column starts at i*numOfRows+1
+	unsigned long* h_compData = organizeData(compData, numOfCols, numOfRows);
 	// Device Variables
-
 	// We will need to rework compData from 2D to be 1D
 	unsigned long* d_compData;
 	unsigned long* d_decompData;
@@ -351,21 +380,18 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// Similar argument for the decompressed version of the data...
 	CHECK(cudaMalloc((void **) &d_decompData, sizeof(unsigned long) * numOfRows * numOfCols));
 
-	// We will flatten the data, but to every column starts at i*numOfRows+1
-	for(int i = 0; i < numOfCols; i++){
-		CHECK(cudaMemcpy(&d_compData[i * (numOfRows+1)], compData[i], sizeof(unsigned long)*(compData[i][0]+1), cudaMemcpyHostToDevice));
-	}
+	
+	CHECK(cudaMemcpy(d_compData, h_compData, sizeof(unsigned long) * (numOfRows+1) * numOfCols, cudaMemcpyHostToDevice));
 	// We know that the data is a multiple of 63.
-	// So, we can make as many blocks as needed..
-	dim3 grid(numOfCols, 1, 1);
+	// We know how many threads are per block, so we need to figure out the number of blocks needed..
+	dim3 grid(ceil(numOfCols*numOfRows/((double) THREADSPERBLOCK)), 1, 1);
 	// Each block will be 63 threads since data is a multiple of 63
-	dim3 block(63, 1, 1);
-
-	// 
+	dim3 block(THREADSPERBLOCK, 1, 1);
 
 	d_decompressionKernel<<<grid, block>>>(d_compData, d_decompData, numOfRows, numOfCols);
 	cudaDeviceSynchronize();
 
+	printf("Test\n");
 
 	// // We can now do stuff on d_decompData...
 	d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
@@ -404,78 +430,117 @@ void d_COAKernel(unsigned long* decompData, int numOfRows, int numOfCols){
 
 __global__
 void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, int numOfRows, int numOfCols){
-	// For Now, simple Data Print...
-	// if(threadIdx.x == 0 && blockIdx.x == 3){
-	// 	printUlongArray(compData, (numOfRows+1) * blockIdx.x, compData[(numOfRows+1) * blockIdx.x]+1);
-	// }
-	const int size = 10;
-	// Each Block deals with 1 columns for now...
-	unsigned long decomp_col[size];
-	d_decompressionHelperKernel(compData, compData[(numOfRows+1) * blockIdx.x], numOfRows, (numOfRows+1) * blockIdx.x + 1, decomp_col);
-	// Move Data over...
-	__syncthreads();
 	if(threadIdx.x == 0){
-		for(int i = 0; i < size; i += 1){
-			decompData[numOfRows*blockIdx.x + i] = decomp_col[i];
-			//printf("I just put %lx in decompData at %d\n", decomp_col[i], numOfRows*blockIdx.x + i);
-		}
+		printUlongArray(compData, 0, 100);
 	}
+	d_decompressionHelperKernel(compData, compData[(numOfRows+1) * blockIdx.x], numOfRows*numOfCols, (numOfRows+1) * blockIdx.x + 1, decompData);
+	// Index of chunk i is at (numOfRows+1) * i
+	// Size of chunk i is at compData[(numOfRows+1) * i]
+
 }
 
-
-
 __device__
-void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSize, int start, long unsigned* decompData){
+void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSize, int start, long unsigned* decompDataOut){
 	// For reference, cData is the entire array of compressed data
 	// cSize is how many elements we will process
 	// cDecompSize is the output number of elements
 	// start is the start point	
 
-	// Need to redo this whole method to be in parallel...
-	if(threadIdx.x == 0){
-		for(int i = 0; i < cSize; i++){
-			// For each piece of data, how much will it need?
-			if(cData[start+i] >> 63){
-				// Clear the last two bits
-				decompData[i] = (cData[start+i] << 2) >> 2;
-			}else{
-				decompData[i] = 1;
-			}
+	// Shared memory needed for all operations...
+	__shared__ unsigned long decompDataShared[THREADSPERBLOCK];
+	__shared__ unsigned long startingPoints[THREADSPERBLOCK];
+	__shared__ unsigned long endPoints[THREADSPERBLOCK];
+	__shared__ unsigned long wordIndex[THREADSPERBLOCK];
+	int id = threadIdx.x;
+
+	if(id < cSize){
+		int put = start + id;
+		unsigned long dataToPut = cData[put];
+		if(dataToPut >> 63){
+			decompDataShared[id] = (dataToPut << 2) >> 2; 
+		}else{
+			decompDataShared[id] = 1;
 		}
-		int* startingPoints;
-		int Q[10];
-		startingPoints = Q;
-		d_badExclusiveScan(decompData, startingPoints, cDecompSize);
-		long unsigned* endPoints;
-		long unsigned E[10];
-		endPoints = E;
-		for(int i = 1; i < cSize; i++){
-			endPoints[startingPoints[i] - 1] = 1;
-		}
-		int* wordIndex;
-		int K[10];
-		wordIndex = K;
-		d_badExclusiveScan(endPoints, wordIndex, cDecompSize);
-		for(int i = 0; i < cDecompSize; i++){
-			unsigned long tempWord = cData[wordIndex[i] + start];
-			if(tempWord >> 63){
-				uint whatFill = (tempWord << 1) >> 63;
-				if(whatFill){
-					decompData[i] = 0x7fffffffffffffff;
-				}else{
-					decompData[i] = 0;
-				}
+	}else{
+		decompDataShared[id] = 0;
+	}
+
+	__syncthreads();
+
+	d_ExclusiveScan(decompDataShared, startingPoints, cSize);
+	
+	if(id < cSize && id > 0){
+		endPoints[startingPoints[id] - 1] = 1;
+	}else{
+		endPoints[id] = 0;
+	}	
+
+	d_ExclusiveScan(endPoints, wordIndex, cDecompSize);
+
+	if(id < cDecompSize){
+		unsigned long tempWord = cData[wordIndex[id] + start];
+		if(tempWord >> 63){
+			uint whatFill = (tempWord << 1) >> 63;
+			if(whatFill){
+				decompDataOut[cDecompSize*blockIdx.x + threadIdx.x] = 0x7fffffffffffffff;
 			}else{
-				decompData[i] = tempWord;
+				decompDataOut[cDecompSize*blockIdx.x + threadIdx.x] = 0;
 			}
-			//printf("Thread: %d, in block: %d, put %lx in %d", threadIdx.x, blockIdx.x, decompData[i], i);
+		}else{
+			decompDataOut[cDecompSize*blockIdx.x + threadIdx.x] = tempWord;
 		}
 	}
+
+	if(threadIdx.x == 0){
+		printUlongArray(decompDataOut, 0, 100);
+	}
+	// // Need to redo this whole method to be in parallel...
+	// if(threadIdx.x == 0){
+	// 	// for(int i = 0; i < cSize; i++){
+	// 	// 	// For each piece of data, how much will it need?
+	// 	// 	if(cData[start+i] >> 63){
+	// 	// 		// Clear the last two bits
+	// 	// 		decompData[i] = (cData[start+i] << 2) >> 2;
+	// 	// 	}else{
+	// 	// 		decompData[i] = 1;
+	// 	// 	}
+	// 	// }
+	// 	// int* startingPoints;
+	// 	// int Q[10];
+	// 	// startingPoints = Q;
+	// 	// d_ExclusiveScan(decompData, startingPoints, cDecompSize);
+	// 	// long unsigned* endPoints;
+	// 	// long unsigned E[10];
+	// 	// endPoints = E;
+	// 	// for(int i = 1; i < cSize; i++){
+	// 	// 	endPoints[startingPoints[i] - 1] = 1;
+	// 	// }
+	// 	// int* wordIndex;
+	// 	// int K[10];
+	// 	// wordIndex = K;
+	// 	// d_ExclusiveScan(endPoints, wordIndex, cDecompSize);
+	// 	for(int i = 0; i < cDecompSize; i++){
+	// 		unsigned long tempWord = cData[wordIndex[i] + start];
+	// 		if(tempWord >> 63){
+	// 			uint whatFill = (tempWord << 1) >> 63;
+	// 			if(whatFill){
+	// 				decompData[cDecompSize*blockIdx.x + i] = 0x7fffffffffffffff;
+	// 			}else{
+	// 				decompData[cDecompSize*blockIdx.x + i] = 0;
+	// 			}
+	// 		}else{
+	// 			decompData[cDecompSize*blockIdx.x + i] = tempWord;
+	// 		}
+	// 		//printf("Thread: %d, in block: %d, put %lx in %d", threadIdx.x, blockIdx.x, decompData[i], i);
+	// 	}
+	// }
+
+	
 }
 
 
 __device__
-void d_badExclusiveScan(unsigned long* data, int* output, int size){
+void d_ExclusiveScan(unsigned long* data, unsigned long* output, int size){
 	for(int i = 0; i < size; i++){
 		if(i){
 			output[i] = output[i-1] + data[i-1];
@@ -492,7 +557,6 @@ void printUlongArray(unsigned long* array, int startIdx, int length){
 	}
 	printf("\n");
 }
-
 
 
 
