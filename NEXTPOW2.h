@@ -1,1 +1,1 @@
-#define NEXTPOW2(call) pow(2, ciel(log2((double)call)))
+#define NEXTPOW2(call) pow(2, ceil(log2((double)call)))

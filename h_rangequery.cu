@@ -90,7 +90,7 @@ void simpleQuery(int* binsOfInterest, long unsigned* vector, char ** labels, int
     int i;
     for(i = 0; i < numOfValues; i++){
         if(inBin(vector[i], binsOfInterest, lengthOfBins)){
-            printf("%s %d %d %d\n", labels[i], vector[i], i/63, (i % 63) + 1);
+            printf("%s %d %d %d\n", labels[i], vector[i], i/62, (i % 62) + 1);
         }
     }
 }

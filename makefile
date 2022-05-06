@@ -12,7 +12,7 @@ NVCCFLAGS = -c -O2 -Xptxas -O2 --compiler-options -Wall -rdc=true -lcudadevrt
 #Flags for debugging
 #NVCCFLAGS = -c -G --compiler-options -Wall --compiler-options -g
 
-OBJS = rangequery.o wrappers.o h_rangequery.o
+OBJS = rangequery.o wrappers.o h_rangequery.o d_rangequery.o
 .SUFFIXES: .cu .o .h 
 .cu.o:
 	$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $< -o $@
@@ -20,7 +20,7 @@ OBJS = rangequery.o wrappers.o h_rangequery.o
 rangequery: $(OBJS)
 	$(NVCC) $(OBJS) -L/usr/local/cuda/lib64 -lcuda -lcudart -ljpeg -o rangequery
 
-rangequery.o: rangequery.cu wrappers.h h_rangequery.h config.h 
+rangequery.o: rangequery.cu wrappers.h h_rangequery.h d_rangequery.h config.h 
 
 h_rangequery.o: h_rangequery.cu h_rangequery.h CHECK.h config.h
 

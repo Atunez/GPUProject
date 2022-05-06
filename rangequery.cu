@@ -4,6 +4,7 @@
 #include <jerror.h>
 #include "wrappers.h"
 #include "h_rangequery.h"
+#include "d_rangequery.h"
 
 #define CHANNELS 3
 
@@ -50,7 +51,11 @@ int main(int argc, char * argv[])
 	// make an array to story all the data...
 	unsigned long cols[numBins][numOfWords];
 	unsigned long ** realCols = (unsigned long **) Malloc(numBins * sizeof(sizeof(unsigned long) * numOfWords));
-
+	for(i = 0; i < numBins; i++){
+		for(j = 0; j < numOfWords; j++){
+			cols[i][j] = 0;
+		}
+	}
 	// every row has its label, which we will need for later...
 	// but, for cols[i][j], its label should be 
 	// 0 1 0
@@ -59,8 +64,8 @@ int main(int argc, char * argv[])
 	char ** labels = (char **) Malloc(sizeof(11 * sizeof(char)) * rows);
 	unsigned long basic_values[rows];
 	
-	printf("rows = %d, range = %d\n", rows, range);
-	printf("cols[%d][%d]\n", numBins, numOfWords);
+	//printf("rows = %d, range = %d\n", rows, range);
+	//printf("cols[%d][%d]\n", numBins, numOfWords);
 
 	// bin the column data 
 	for(i = 0; i < rows; i++){
@@ -89,10 +94,10 @@ int main(int argc, char * argv[])
 		for(j = 0; j < numBins; j++){
 			if(j == binIndex) {
 				// set bit to 1
-				setBit(cols[j][i/63], (i % 63) + 1, 1);
+				setBit(cols[j][i/62], (i % 62) + 1, 1);
 			} else {
 				// set bit to 0 
-				setBit(cols[j][i/63], (i % 63) + 1, 0);
+				setBit(cols[j][i/62], (i % 62) + 1, 0);
 			}
 		}
 	}
@@ -100,28 +105,67 @@ int main(int argc, char * argv[])
 	// Answers a query directly O(nk)
 	// k is length of bins of interest
 	// n is the number of rows
-	int binsOfInterest[4] = {0,3,5,7};
-	simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
+	// int binsOfInterest[4] = {0,3,5,7};
+	// simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
 
 	// int k;
 	// for(k = 0; k < numBins; k++){
 	// 	realCols[k] = cols[k];
 	// }
-
 	realCols[0] = cols[0];
 	realCols[1] = cols[3];
 	realCols[2] = cols[5];
 	realCols[3] = cols[7];
+
 	// for(k = 0; k < numOfWords; k++){
 	// 	printf("%lx \n", realCols[0][k]);
 	// }
 	
 	long unsigned* temp = COA(realCols, 4, numOfWords);
 
+	realCols[0] = compress(cols[0], numOfWords);
+	realCols[1] = compress(cols[3], numOfWords);
+	realCols[2] = compress(cols[5], numOfWords);
+	realCols[3] = compress(cols[7], numOfWords);
+
+	unsigned long* result = (unsigned long *) Malloc(sizeof(unsigned long) * numOfWords * 4);
+
+	// int y = 1;
+	// for(i = 0; i < numOfWords; i++){
+	// 	printf("%lx ", cols[y][i]);
+	// }
+	// printf("\n");
+	// for(i = 0; i < 1+realCols[y][0]; i++){
+	// 	printf("%lx ", realCols[y][i]);
+	// }
+	// printf("\n");
+	// for(i = 0; i < 1+realCols[1][0]; i++){
+	// 	printf("%lx ", realCols[1][i]);
+	// }
+	// printf("\n");
+	// 	for(i = 0; i < 1+realCols[2][0]; i++){
+	// 	printf("%lx ", realCols[2][i]);
+	// }
+	// printf("\n");
+	// 	for(i = 0; i < 1+realCols[3][0]; i++){
+	// 	printf("%lx ", realCols[3][i]);
+	// }
+	// printf("\n");
 	int k;
+	// for(k = 0; k < numOfWords; k++){
+	// 	printf("%lx %lx %lx %lx \n", cols[0][k], cols[3][k], cols[5][k], cols[7][k]);
+	// }
+	d_rangequery(realCols, result, 4, numOfWords);
+	// int k;
 	for(k = 0; k < numOfWords; k++){
-		printf("%lx \n", temp[k]);
+		if(temp[k] != result[k]){
+			printf("Error, GPU isn't getting the same as CPU! \n");
+			printf("CPU: %lx GPU: %lx row: %d \n", temp[k], result[k], k);
+			return EXIT_FAILURE;
+		}
 	}
+
+	printf("Yay, COA Works...\n");
 	
 	// for label[i] it goes to cols[X][i/63] 
 
@@ -181,15 +225,25 @@ void printBins(int rows, int numBins, unsigned long ** cols)
 
 void setBit(unsigned long &source, int position, int value)
 {
-	unsigned long mask = 0xffffffffffffffff;
-	mask = mask << position;
-	mask = mask >> 63;
-	mask = mask << 63 - position;
-	if (value == 1 ) { 
-		source = source | mask;
-	} else {
-		mask = ~mask;
-		source = source & mask;
+	// unsigned long mask = 0xffffffffffffffff;
+	// mask = mask << position;
+	// mask = mask >> 63;
+	// mask = mask << 63 - position;
+	// if (value == 1 ) { 
+	// 	source = source | mask;
+	// } else {
+	// 	mask = ~mask;
+	// 	source = source & mask;
+	// }
+	// need to set position to value in source...
+
+	if(value){
+		unsigned long mask = 0x0000000000000001;
+		// we have 1 at the start
+		source |= (mask << position);
+	}else{
+		unsigned long mask = 0x0000000000000001;
+		source &= ~(mask << position);
 	}
 }
 
