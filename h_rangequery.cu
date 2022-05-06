@@ -7,6 +7,7 @@ long unsigned* compress(long unsigned* bitvector, int number)
 {
     // worst case no copmression
     long unsigned* answer = (long unsigned*) malloc(sizeof(long unsigned) * number); 
+    answer[0] = 0;
     int i;
     for(i = 0; i < number; i++){
         // we should do the compression here...

@@ -321,7 +321,7 @@ static __global__ void d_decompressionKernel(unsigned long* compData, unsigned l
 static __global__ void d_COAKernel(unsigned long* decompData, int numOfRows, int numOfCols);
 
 // Functions called from GPU
-static __device__ void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSize, int start, unsigned long* output);
+static __device__ void d_decompressionHelperKernel(unsigned long* cData, unsigned long cSize, int cDecompSize, int start, unsigned long* output);
 static __device__ void d_ExclusiveScan(unsigned long* decompData, unsigned long* output, int decompDataSize);
 
 // Debugging Function
@@ -338,6 +338,9 @@ long unsigned* organizeData(unsigned long** compData, int numOfCols, int numOfRo
 	int totalSoFar = 0;
 	int lastWrittenTo = 1;
 	int lastChunkUpdate = 0;
+	for (int i = 0; i < numOfCols * (numOfRows+1); i++) {
+		output[i] = 0;
+	}
 	for(int i = 0; i < numOfCols; i++){
 		// if we can write data to this chunk still...
 		if(totalSoFar + compData[i][0] < THREADSPERBLOCK){
@@ -347,6 +350,10 @@ long unsigned* organizeData(unsigned long** compData, int numOfCols, int numOfRo
 			}
 			output[lastChunkUpdate] += compData[i][0];
 		}else{
+
+			// DEAL WITH SIZES TOO BIG!!! 
+			// FOR ABDEL FROM BRADY <3
+
 			// The addition of this column will bring the number to something scuffed...
 			// We will redo this as if we started at a new block...
 			lastChunkUpdate = lastWrittenTo;
@@ -367,15 +374,21 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// the format of compData is:
 	// compData[0] = length of data
 	// compData[1] is actual results...
+
+	printf("got here tho!\n");
 	float gpuMsecTime;
 	cudaEvent_t start_gpu, stop_gpu;
     CHECK(cudaEventCreate(&start_gpu));
     CHECK(cudaEventCreate(&stop_gpu));
     CHECK(cudaEventRecord(start_gpu));
 
+	printf("done creating events\n");
+
 
 	// We will flatten the data, but to every column starts at i*numOfRows+1
 	unsigned long* h_compData = organizeData(compData, numOfCols, numOfRows);
+
+	printf("organizing complete\n");
 	// Device Variables
 	// We will need to rework compData from 2D to be 1D
 	unsigned long* d_compData;
@@ -394,14 +407,30 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// Each block will be 63 threads since data is a multiple of 63
 	dim3 block(THREADSPERBLOCK, 1, 1);
 
+	unsigned long compSizeCol1 = h_compData[0];
+	printf("CPU SAYS | compSizeCol1 : %lu\n\n", compSizeCol1);
+	unsigned long compSizeCol2 = h_compData[1];
+	unsigned long compSizeCol3 = h_compData[2];
+	unsigned long compSizeCol4 = h_compData[3];
+	/*for (int i = 0; i < compSizeCol1 + 1; i++) {
+		printf("%lu\n", h_compData[i+4]);
+	}*/
+
+	printf("thiccc got here\n");
 	d_decompressionKernel<<<grid, block>>>(d_compData, d_decompData, numOfRows, numOfCols);
+	printf("thiccc got here 2\n");
+
 	cudaDeviceSynchronize();
 
+// --- THIS FAILING
 	// // We can now do stuff on d_decompData...
 	d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
+	printf("thiccc got here 3\n");
 	cudaDeviceSynchronize();
 
 	CHECK(cudaMemcpy(result, d_decompData, sizeof(unsigned long)*numOfRows*numOfCols, cudaMemcpyDeviceToHost));
+// --- END FAIL
+
 
 	CHECK(cudaEventRecord(stop_gpu));
     CHECK(cudaEventSynchronize(stop_gpu));
@@ -432,20 +461,21 @@ void d_COAHelper(unsigned long* decompData, int numOfRows, int numOfCols, int st
 __global__
 void d_COAKernel(unsigned long* decompData, int numOfRows, int numOfCols){
 	d_COAHelper(decompData, numOfRows, numOfCols, blockIdx.x*numOfRows);
-	__syncthreads();
+	//__syncthreads();
 }
 
 __global__
 void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, int numOfRows, int numOfCols){
-	d_decompressionHelperKernel(compData, compData[(numOfRows+1) * blockIdx.x], numOfRows*numOfCols, (numOfRows+1) * blockIdx.x + 1, decompData);
-	__syncthreads();
+	//__syncthreads();
+	d_decompressionHelperKernel(compData, compData[0], numOfRows*numOfCols, (numOfRows+1) * blockIdx.x + 1, decompData);
+	
 	// Index of chunk i is at (numOfRows+1) * i
 	// Size of chunk i is at compData[(numOfRows+1) * i]
 
 }
 
 __device__
-void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSize, int start, long unsigned* decompDataOut){
+void d_decompressionHelperKernel(unsigned long* cData, unsigned long cSize, int cDecompSize, int start, long unsigned* decompDataOut){
 	// For reference, cData is the entire array of compressed data
 	// cSize is how many elements we will process
 	// cDecompSize is the output number of elements
@@ -457,6 +487,12 @@ void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSiz
 	__shared__ unsigned long endPoints[THREADSPERBLOCK];
 	__shared__ unsigned long wordIndex[THREADSPERBLOCK];
 	int id = threadIdx.x;
+
+	if(threadIdx.x == 0) {
+		printf("cSize : %lu\n", cSize);
+		printf("cDecompSize : %d\n", cDecompSize);
+		printf("start : %d\n", start);
+	}
 
 	if(id < cSize){
 		int put = start + id;
@@ -472,6 +508,7 @@ void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSiz
 
 	__syncthreads();
 
+
 	d_ExclusiveScan(decompDataShared, startingPoints, cSize);
 
 	__syncthreads();
@@ -483,6 +520,8 @@ void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSiz
 	}	
 
 	__syncthreads();
+
+	
 
 	d_ExclusiveScan(endPoints, wordIndex, cDecompSize);
 
@@ -549,11 +588,14 @@ void d_decompressionHelperKernel(unsigned long* cData, int cSize, int cDecompSiz
 
 __device__
 void d_ExclusiveScan(unsigned long* data, unsigned long* output, int size){
-	for(int i = 0; i < size; i++){
-		if(i){
-			output[i] = output[i-1] + data[i-1];
-		}else{
-			output[i] = 0;
+
+	if (threadIdx.x == 0) {
+		for(int i = 0; i < size; i++){
+			if(i){
+				output[i] = output[i-1] + data[i-1];
+			}else{
+				output[i] = 0;
+			}
 		}
 	}
 }

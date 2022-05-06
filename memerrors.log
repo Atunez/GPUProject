@@ -1,0 +1,99 @@
+Usage: cuda-memcheck [options] [your-program] [your-program-options]
+Options:
+ --binary-patching <yes|no>  [Default : yes]
+                       Control the binary patching of the device code. This is enabled by default. 
+                       Disabling this option will result in a loss of precision for error reporting.
+ --check-api-memory-access <yes|no> [Default : yes]
+                       Check cudaMemcpy/cudaMemset for accesses to device memory
+ --check-deprecated-instr <yes|no>  [Default : no]
+                       Check for usage of deprecated instructions.
+                       If deprecated instruction usage is found, an error will be reported.
+                       Which instructions are checked might depend on the selected tool.
+                       This is disabled by default.
+ --check-device-heap <yes|no>  [Default : yes]
+                       Check allocations on the device heap. This is enabled by default. 
+ --demangle <full|simple|no>  [Default : full]
+                       Demangle function names
+                       full   : Show full name and prototype
+                       simple : Show only device kernel name
+                       no     : Show mangled names
+ --destroy-on-device-error <context|kernel>   [Default : context]
+                       Behavior of cuda-memcheck on a precise device error.
+                       NOTE: Imprecise errors  will always destroy the context.
+                       context : CUDA Context is terminated with an error.
+                       kernel  : Kernel is terminated. Subsequent kernel launches are still allowed.
+ --error-exitcode <number> [Default : 0]
+                       When this is set, memcheck will return the given exitcode when any errors are detected
+ --filter key1=val1,key2=val2,... 
+                       The filter option can be used to control the kernels that will be checked by the tool
+                       Multiple filter options can be defined. Each option is additive, so kernels matching
+                       any specified filter will be checked
+                       Filters are specified as key value pairs, with each pair separated by a ','
+                       Keys have both a long form, and a shorter form for convenience
+                       Valid values for keys are:
+                           kernel_name, kne      : The value is the full demangled name of the kernel
+                           kernel_substring, kns : The value is a substring present in the demangled name of the kernel
+                       NOTE: The name and substring keys cannot be simultaneously specified
+ --flush-to-disk <yes|no>   [Default : no]
+                       Flush errors to disk. This can be enabled to ensure all errors are flushed down
+ --force-blocking-launches <yes|no>   [Default : no]
+                       Force launches to be blocking.
+ -h | --help           Show this message.
+ --help-debug          Show information about debug only flags
+ --language <c|fortran> [Default : c]
+                       This option can be used to enable language specific behavior. When set to fortan, the thread and block indices
+                       of messages printed by cuda-memcheck will start with 1-based offset to match Fortran semantics.
+ --log-file <string>   File where cuda-memcheck will write all of its text output. If not specified, memcheck output is written to stdout. 
+                       The sequence %p in the string name will be replaced by the pid of the cuda-memcheck application.
+                       The sequence %q{FOO} will be replaced by the value of the environment variable FOO. If the environment variable
+                       is not defined, it will be replaced by an empty string.
+                       The sequence %% is replaced with a literal % in the file name.
+                       Any other character following % will cause the entire string to be ignored. 
+                       If the file cannot be written to for any reason including an invalid path, insufficient permissions or disk being full
+                       the output will go to stdout
+ --leak-check <full|no> [Default : no]  
+                       Print leak information for CUDA allocations. 
+                       NOTE: Program must end with cudaDeviceReset() for this to work.
+ --prefix <string>     Changes the prefix string displayed by cuda-memcheck.
+ --print-level <info|warn|error|fatal> [Default : warn]
+                       Set the minimum level of errors to print
+ --print-limit <number> [Default is : 10000]
+                       When this is set, memcheck will stop printing errors after reaching the given number
+                       of errors. Use 0 for unlimited printing.
+ --read <file>         Reads error records from a given file.
+ --racecheck-report <all|hazard|analysis>  [Default : analysis]
+                       The reporting mode that applies to racecheck. 
+                       all      : Report all hazards and race analysis reports.
+                       hazard   : Report only hazards.
+                       analysis : Report only race analysis results.
+ --report-api-errors <all|explicit|no> [Default : explicit]
+                       Print errors if any API call fails
+                       all      : Report all CUDA API errors, including those APIs invoked implicitly
+                       explicit : Report errors in explicit CUDA API calls only
+                       no       : Disable reporting of CUDA API errors
+ --save <file>         Saves the error record to file.
+                       The sequence %p in the string name will be replaced by the pid of the cuda-memcheck application.
+                       The sequence %q{FOO} will be replaced by the value of the environment variable FOO. If the environment variable
+                       is not defined, it will be replaced by an empty string.
+                       The sequence %% is replaced with a literal % in the file name.
+                       Any other character following % will cause an error. 
+ --show-backtrace <yes|host|device|no> [Default : yes]
+                       Display a backtrace on error.
+                       no     : No backtrace shown
+                       host   : Only host backtrace shown
+                       device : Only device backtrace shown for precise errors
+                       yes    : Host and device backtraces shown
+                       See the manual for more information
+ --tool <memcheck|racecheck|synccheck|initcheck>  [Default : memcheck]
+                       Set the tool to use.
+                       memcheck    : Memory access checking
+                       racecheck   : Shared memory hazard checking
+                       Note : This disables memcheck, so make sure the app is error free.
+                       synccheck   : Synchronization checking
+                       initcheck   : Global memory initialization checking
+ --track-unused-memory <yes|no> [Default : no]
+                       Check for unused memory allocations. This requires initcheck tool.
+ -V | --version        Print the version of cuda-memcheck.
+
+Please see the cuda-memcheck manual for more information.
+

@@ -126,6 +126,7 @@ int main(int argc, char * argv[])
 	realCols[3] = compress(cols[7], numOfWords);
 
 	unsigned long* result = (unsigned long *) Malloc(sizeof(unsigned long) * numOfWords * 4);
+	printf("result has finished compressing\n");
 	// int y = 1;
 	// for(i = 0; i < numOfWords; i++){
 	// 	printf("%lx ", cols[y][i]);
