@@ -1,7 +1,8 @@
 #include <sys/stat.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <jerror.h>
+#include <cuda_runtime.h>
+#include "CHECK.h"
 #include "wrappers.h"
 #include "h_rangequery.h"
 #include "d_rangequery.h"
@@ -105,8 +106,8 @@ int main(int argc, char * argv[])
 	// Answers a query directly O(nk)
 	// k is length of bins of interest
 	// n is the number of rows
-	int binsOfInterest[4] = {0,3,5,7};
-	simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
+	// int binsOfInterest[4] = {0,3,5,7};
+	// simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
 
 	// int k;
 	// for(k = 0; k < numBins; k++){
@@ -148,20 +149,38 @@ int main(int argc, char * argv[])
 	// printf("\n");
 	int k;
 
-	for(k = 0; k < numOfWords; k++){
-		printf("%lx %lx %lx %lx \n", cols[0][k], cols[3][k], cols[5][k], cols[7][k]);
-	}
-	d_rangequery(realCols, result, 4, numOfWords);
+	// for(k = 0; k < numOfWords; k++){
+	// 	printf("%lx %lx %lx %lx \n", cols[0][k], cols[3][k], cols[5][k], cols[7][k]);
+	// }
+	float time_taken_gpu = d_rangequery(realCols, result, 4, numOfWords);
+
+	printf("Time of range query on a GPU: %f msec\n", time_taken_gpu);
 
 	realCols[0] = cols[0];
 	realCols[1] = cols[3];
 	realCols[2] = cols[5];
 	realCols[3] = cols[7];
+    cudaEvent_t start_cpu, stop_cpu;
+    float cpuMsecTime = -1;
+
+	CHECK(cudaEventCreate(&start_cpu));  
+    CHECK(cudaEventCreate(&stop_cpu));
+    CHECK(cudaEventRecord(start_cpu));   
+
 
 	long unsigned* temp = COA(realCols, 4, numOfWords);
-		for(k = 0; k < numOfWords; k++){
-			printf("%lx \n", temp[k]);
-		}
+	
+	CHECK(cudaEventRecord(stop_cpu));
+    CHECK(cudaEventSynchronize(stop_cpu)); 
+    //calculate the elapsed time between the two events 
+    CHECK(cudaEventElapsedTime(&cpuMsecTime, start_cpu, stop_cpu));
+
+	printf("Time of range query on a CPU: %f msec\n", cpuMsecTime);
+	printf("Speedup: %f", cpuMsecTime/time_taken_gpu);
+
+		// for(k = 0; k < numOfWords; k++){
+		// 	printf("%lx \n", temp[k]);
+		// }
 
 	// int k;
 	for(k = 0; k < numOfWords; k++){
@@ -170,7 +189,7 @@ int main(int argc, char * argv[])
 			printf("CPU: %lx GPU: %lx row: %d \n", temp[k], result[k], k);
 			return EXIT_FAILURE;
 		}else{
-			printf("CPU: %lx GPU: %lx row: %d \n", temp[k], result[k], k); 
+			//printf("CPU: %lx GPU: %lx row: %d \n", temp[k], result[k], k); 
 		}
 	}
 
