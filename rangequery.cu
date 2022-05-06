@@ -94,10 +94,10 @@ int main(int argc, char * argv[])
 		for(j = 0; j < numBins; j++){
 			if(j == binIndex) {
 				// set bit to 1
-				setBit(cols[j][i/62], (i % 62) + 1, 1);
+				setBit(cols[j][i/63], (i % 63), 1);
 			} else {
 				// set bit to 0 
-				setBit(cols[j][i/62], (i % 62) + 1, 0);
+				setBit(cols[j][i/63], (i % 63), 0);
 			}
 		}
 	}
@@ -105,8 +105,8 @@ int main(int argc, char * argv[])
 	// Answers a query directly O(nk)
 	// k is length of bins of interest
 	// n is the number of rows
-	// int binsOfInterest[4] = {0,3,5,7};
-	// simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
+	int binsOfInterest[4] = {0,3,5,7};
+	simpleQuery(binsOfInterest, basic_values, labels, rows, 4);
 
 	// int k;
 	// for(k = 0; k < numBins; k++){
@@ -162,6 +162,8 @@ int main(int argc, char * argv[])
 			printf("Error, GPU isn't getting the same as CPU! \n");
 			printf("CPU: %lx GPU: %lx row: %d \n", temp[k], result[k], k);
 			return EXIT_FAILURE;
+		}else{
+			printf("CPU: %lx GPU: %lx row: %d \n", temp[k], result[k], k); 
 		}
 	}
 
