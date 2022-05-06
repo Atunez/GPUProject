@@ -75,6 +75,67 @@ long unsigned* compress(long unsigned* bitvector, int number)
     return answer;
 }
 
+
+int inBin(long unsigned value, int* binsOfInterest, int lengthOfBins){
+    int i;
+    for(i = 0; i < lengthOfBins; i++){
+        if(value/BINSIZE == binsOfInterest[i])
+            return 1;
+    }
+    return 0;
+}
+
+// Given some startBin and endBin, find all the values that are in those bins...
+void simpleQuery(int* binsOfInterest, long unsigned* vector, char ** labels, int numOfValues, int lengthOfBins){
+    int i;
+    for(i = 0; i < numOfValues; i++){
+        if(inBin(vector[i], binsOfInterest, lengthOfBins)){
+            printf("%s %d\n", labels[i], vector[i]);
+        }
+    }
+}
+
+// // Do the math for two atoms
+// // which decides the boolean operation...
+// long unsigned atomMath(long unsigned op1, long unsigned op2, int which){
+//     long unsigned out = 0;
+//     if(op1 >> 63 && op2 >> 63){
+//         out = 0x8000000000000000;
+//         int value = 0;
+//         if(which == 1){
+
+//         }else{
+
+//         }
+//     }else if(!(op1 >> 63) && !(op2 >> 63)){
+
+//     }else{
+//         if(op2 >> 63){
+//             long unsigned t = op2;
+//             op2 = op1;
+//             op1 = t;
+//         }
+//     }
+//     return out;
+// }
+
+long unsigned* COA(long unsigned** Cols, int m, int n){
+    int s = m/2;
+    while(s >= 1){
+        int i;
+        for(i = 0; i < s; i++){
+            long unsigned* c1 = Cols[i];
+            long unsigned* c2 = Cols[i+s];
+            int j;
+            for(j = 0; j < n; j++){
+                Cols[i][j] = c1[j] | c2[j];
+            }
+        }
+        s /= 2;
+    }
+    return Cols[0];
+}
+
 long unsigned* decompress(long unsigned* bitvector, int number)
 {
     // should be the reverse of compress...
@@ -110,25 +171,10 @@ void testCompressDecompress()
 					 0x0, 			0x0000027592351768, 
 					 0x1ffffffffffffff1};
     int number = 7;
-    long unsigned int* totest = randomnumbers;
-    // temp should be: 0x80.........02, 0xc0.....02, 0x80.....01, ....
-    long unsigned int* temp = compress(randomnumbers, number);
-    int i;
-    // for(i = 0; i < (int) temp[0]+1; i++){
-    //     printf("%lx \n", temp[i]);
-    // }
-    long unsigned int* output = decompress(temp, number);
-    
-    for(i = 0; i < number; i++){
-        if(output[i] != totest[i]){
-            printf("Test failed at index: %d, original: %lx, decompressed: %lx\n", i, totest[i], output[i]);
-            exit(EXIT_FAILURE);
-        }
-    }
-    printf("Test compression passed...\n");
+    testCompressDecompress(randomnumbers, number);
 }
 
-void testCompressDecompress2(unsigned long * bitVector, int size){
+void testCompressDecompress(unsigned long * bitVector, int size){ 
     long unsigned int* temp = compress(bitVector, size);
     int i;
     // for(i = 0; i < (int) temp[0]+1; i++){
