@@ -112,16 +112,12 @@ int main(int argc, char * argv[])
 	// for(k = 0; k < numBins; k++){
 	// 	realCols[k] = cols[k];
 	// }
-	realCols[0] = cols[0];
-	realCols[1] = cols[3];
-	realCols[2] = cols[5];
-	realCols[3] = cols[7];
+
 
 	// for(k = 0; k < numOfWords; k++){
 	// 	printf("%lx \n", realCols[0][k]);
 	// }
 	
-	long unsigned* temp = COA(realCols, 4, numOfWords);
 
 	realCols[0] = compress(cols[0], numOfWords);
 	realCols[1] = compress(cols[3], numOfWords);
@@ -129,7 +125,6 @@ int main(int argc, char * argv[])
 	realCols[3] = compress(cols[7], numOfWords);
 
 	unsigned long* result = (unsigned long *) Malloc(sizeof(unsigned long) * numOfWords * 4);
-
 	// int y = 1;
 	// for(i = 0; i < numOfWords; i++){
 	// 	printf("%lx ", cols[y][i]);
@@ -152,10 +147,22 @@ int main(int argc, char * argv[])
 	// }
 	// printf("\n");
 	int k;
-	// for(k = 0; k < numOfWords; k++){
-	// 	printf("%lx %lx %lx %lx \n", cols[0][k], cols[3][k], cols[5][k], cols[7][k]);
-	// }
+
+	for(k = 0; k < numOfWords; k++){
+		printf("%lx %lx %lx %lx \n", cols[0][k], cols[3][k], cols[5][k], cols[7][k]);
+	}
 	d_rangequery(realCols, result, 4, numOfWords);
+
+	realCols[0] = cols[0];
+	realCols[1] = cols[3];
+	realCols[2] = cols[5];
+	realCols[3] = cols[7];
+
+	long unsigned* temp = COA(realCols, 4, numOfWords);
+		for(k = 0; k < numOfWords; k++){
+			printf("%lx \n", temp[k]);
+		}
+
 	// int k;
 	for(k = 0; k < numOfWords; k++){
 		if(temp[k] != result[k]){
