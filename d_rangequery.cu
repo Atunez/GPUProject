@@ -317,7 +317,7 @@
 // REDO...
 
 // Functions called from CPU
-static __global__ void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, int numOfRows, int numOfCols);
+static __global__ void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, int* dataNeeded, int* dataNeededPrefix);
 static __global__ void d_COAKernel(unsigned long* decompData, int numOfRows, int numOfCols);
 
 // Functions called from GPU
@@ -399,6 +399,33 @@ long unsigned* organizeData(unsigned long** compData, int numOfCols, int numOfRo
 	return output;
 }
 
+int** getDataSize(unsigned long* compData, int numOfChunks){
+	int* ansPrefix = (int *) Malloc(sizeof(int) * numOfChunks);
+	int* ans = (int *) Malloc(sizeof(int) * numOfChunks);
+	for(int i = 0; i < numOfChunks; i++){
+		int sizeOfChunk = compData[i * (THREADSPERBLOCK + 1)];
+		ans[i] = 0;
+		ansPrefix[i] = 0;
+		for(int j = 0; j < sizeOfChunk; j++){
+			unsigned long t = compData[i * (THREADSPERBLOCK + 1) + 1 + j];
+			if(t >> 63){
+				int sizeOfFill = (t << 2) >> 2;
+				ans[i] += sizeOfFill;
+			}else{
+				ans[i]++;
+			}
+		}
+		if(i){
+			ansPrefix[i] = ansPrefix[i-1] + ans[i-1];
+		}
+	}
+
+	int** ret = (int **) Malloc(sizeof(int *) * 2);
+	ret[0] = ans;
+	ret[1] = ansPrefix;
+	return ret;
+}
+
 // method that is called by CPU
 // for now do decomp...
 // the numOfCols and Rows refer to the decompressed version of the data...
@@ -419,6 +446,7 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 
 	// We will flatten the data, but to every column starts at i*numOfRows+1
 	unsigned long* h_compData = organizeData(compData, numOfCols, numOfRows, blocksNeeded);
+	int** h_dataNeeded = getDataSize(h_compData, blocksNeeded);
 	// printf("done creating events\n");
     CHECK(cudaEventCreate(&start_gpu));
     CHECK(cudaEventCreate(&stop_gpu));
@@ -428,6 +456,8 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// Device Variables
 	// We will need to rework compData from 2D to be 1D
 	unsigned long* d_compData;
+	int* d_dataNeeded;
+	int* d_dataNeededPrefix;
 	unsigned long* d_decompData;
 
 	// the size of the vector is now however much it takes for one row times all the columns
@@ -435,7 +465,12 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// Similar argument for the decompressed version of the data...
 	CHECK(cudaMalloc((void **) &d_decompData, sizeof(unsigned long) * numOfRows * numOfCols));
 
-	
+	CHECK(cudaMalloc((void **) &d_dataNeeded, sizeof(int) * blocksNeeded));
+	CHECK(cudaMalloc((void **) &d_dataNeededPrefix, sizeof(int) * blocksNeeded));
+
+
+	CHECK(cudaMemcpy(d_dataNeededPrefix, h_dataNeeded[1], sizeof(int) * blocksNeeded, cudaMemcpyHostToDevice));
+	CHECK(cudaMemcpy(d_dataNeeded, h_dataNeeded[0], sizeof(int) * blocksNeeded, cudaMemcpyHostToDevice));
 	CHECK(cudaMemcpy(d_compData, h_compData, sizeof(unsigned long) * blocksNeeded * (THREADSPERBLOCK + 1), cudaMemcpyHostToDevice));
 	// We know that the data is a multiple of 63.
 	// We know how many threads are per block, so we need to figure out the number of blocks needed..
@@ -444,9 +479,10 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	dim3 block(THREADSPERBLOCK, 1, 1);
 
 
-	// for(int i = 0; i < blocksNeeded; i++){
-	// 	printf("CPU: Size of Chunk: %d is %lu\n", i, h_compData[i + THREADSPERBLOCK*i]);
-	// }
+	for(int i = 0; i < blocksNeeded; i++){
+		printf("CPU: Size of Chunk: %d is %lu\n", i, h_compData[i + THREADSPERBLOCK*i]);
+		printf("CPU: Prefix and Not: %d is %d\n", h_dataNeeded[0][i], h_dataNeeded[1][i]);
+	}
 	// unsigned long compSizeCol1 = h_compData[0];
 	// printf("CPU SAYS | compSizeCol1 : %lu\n\n", compSizeCol1);
 	// unsigned long compSizeCol2 = h_compData[THREADSPERBLOCK+1];
@@ -458,7 +494,7 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 		printf("%lu\n", h_compData[i+4]);
 	}*/
 
-	d_decompressionKernel<<<grid, block>>>(d_compData, d_decompData, numOfRows, numOfCols);
+	d_decompressionKernel<<<grid, block>>>(d_compData, d_decompData, d_dataNeeded, d_dataNeededPrefix);
 
 	cudaDeviceSynchronize();
 
@@ -466,7 +502,7 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	// // We can now do stuff on d_decompData...
 	// d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
 	// printf("thiccc got here 3\n");
-	// cudaDeviceSynchronize();
+	// cudaDeviceSynchronize();q
 
 	CHECK(cudaMemcpy(result, d_decompData, sizeof(unsigned long)*numOfRows*numOfCols, cudaMemcpyDeviceToHost));
 // --- END FAIL
@@ -505,13 +541,13 @@ void d_COAKernel(unsigned long* decompData, int numOfRows, int numOfCols){
 }
 
 __global__
-void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, int numOfRows, int numOfCols){
+void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, int* dataNeeded, int* dataNeededPrefix){
 	//__syncthreads();
 
 	// Each block is responsible for 1 chunk of THREADSPERBLOCK data...
 	// 0 1 -- 1008 | 1009 1010 - ... | ...
 	// So, cSize is in blockIdx.x * THREADSPERBLOCK
-	d_decompressionHelperKernel(compData, compData[blockIdx.x * (THREADSPERBLOCK + 1)], numOfRows*numOfCols, blockIdx.x * THREADSPERBLOCK + 1, decompData);
+	d_decompressionHelperKernel(compData, compData[blockIdx.x * (THREADSPERBLOCK + 1)], dataNeeded[blockIdx.x], dataNeededPrefix[blockIdx.x] + blockIdx.x + 1, decompData);
 	
 	// Index of chunk i is at (numOfRows+1) * i
 	// Size of chunk i is at compData[(numOfRows+1) * i]
@@ -569,19 +605,24 @@ void d_decompressionHelperKernel(unsigned long* cData, unsigned long cSize, int 
 		d_ExclusiveScan(endPoints, wordIndex, cDecompSize);
 	__syncthreads();
 
-	// if(id < cDecompSize){
-	// 	unsigned long tempWord = cData[wordIndex[id] + start];
-	// 	if(tempWord >> 63){
-	// 		uint whatFill = (tempWord << 1) >> 63;
-	// 		if(whatFill){
-	// 			decompDataOut[cDecompSize*blockIdx.x + threadIdx.x] = 0x7fffffffffffffff;
-	// 		}else{
-	// 			decompDataOut[cDecompSize*blockIdx.x + threadIdx.x] = 0;
-	// 		}
-	// 	}else{
-	// 		decompDataOut[cDecompSize*blockIdx.x + threadIdx.x] = tempWord;
-	// 	}
-	// }
+	if(id < cDecompSize){
+		unsigned long tempWord = cData[wordIndex[id] + start];
+		int startForOut = start - blockIdx.x - 1;
+		if(tempWord >> 63){
+			uint whatFill = (tempWord << 1) >> 63;
+			if(whatFill){
+				decompDataOut[startForOut + threadIdx.x] = 0x7fffffffffffffff;
+			}else{
+				decompDataOut[startForOut + threadIdx.x] = 0;
+			}
+		}else{
+			if(4096 == startForOut + threadIdx.x){
+				printf("Sad %lx %d %lu\n",tempWord, startForOut + id, wordIndex[id] + start);
+			}
+
+			decompDataOut[startForOut + threadIdx.x] = tempWord;
+		}
+	}
 
 	// // Need to redo this whole method to be in parallel...
 	// if(threadIdx.x == 0){

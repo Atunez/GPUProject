@@ -15,6 +15,7 @@ void printUsage();
 void compare(unsigned char * d_Pout, unsigned char * h_Pout, int size);
 void setBit(unsigned long &source, int position, int value);
 void printBins(int rows, int numBins, unsigned long ** cols);
+void checkDecomp(unsigned long* gpuResult, unsigned long** realData, int dataInCol);
 
 int main(int argc, char * argv[])
 {
@@ -125,6 +126,12 @@ int main(int argc, char * argv[])
 	realCols[2] = compress(cols[5], numOfWords);
 	realCols[3] = compress(cols[7], numOfWords);
 
+	unsigned long** temps = (unsigned long **) Malloc(4 * sizeof(sizeof(unsigned long) * numOfWords));;
+	temps[0] = cols[0];
+	temps[1] = cols[3];
+	temps[2] = cols[5];
+	temps[3] = cols[7];
+
 	unsigned long* result = (unsigned long *) Malloc(sizeof(unsigned long) * numOfWords * 4);
 	printf("result has finished compressing\n");
 	// int y = 1;
@@ -154,6 +161,8 @@ int main(int argc, char * argv[])
 	// 	printf("%lx %lx %lx %lx \n", cols[0][k], cols[3][k], cols[5][k], cols[7][k]);
 	// }
 	float time_taken_gpu = d_rangequery(realCols, result, 4, numOfWords);
+
+	checkDecomp(result, temps, numOfWords);
 
 	printf("Time of range query on a GPU: %f msec\n", time_taken_gpu);
 
@@ -237,6 +246,17 @@ int main(int argc, char * argv[])
     // printf("GPU time: %f msec\n", gpuTime);
     // printf("Speedup: %f\n", cpuTime/gpuTime);
     return EXIT_SUCCESS;
+}
+
+void checkDecomp(unsigned long* gpuResult, unsigned long** realData, int numInCol){
+	for(int i = 0; i < 4; i++){
+		for(int j = 0; j < numInCol; j++){
+			if(gpuResult[i*numInCol + j] != realData[i][j]){
+				printf("Something wrong in Decomp :( %lx %lx %d %d  %lx\n", gpuResult[i*numInCol + j], realData[i][j], i, i*numInCol + j, gpuResult[i*numInCol + j+1]);
+				exit(0);
+			}
+		}
+	}
 }
 
 void printBins(int rows, int numBins, unsigned long ** cols)
