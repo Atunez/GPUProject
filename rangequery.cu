@@ -164,7 +164,7 @@ int main(int argc, char * argv[])
 	// }
 	float time_taken_gpu = d_rangequery(realCols, result, 4, numOfWords);
 
-	checkDecomp(result, temps, numOfWords);
+	//checkDecomp(result, temps, numOfWords);
 
 	printf("Time of range query on a GPU: %f msec\n", time_taken_gpu);
 

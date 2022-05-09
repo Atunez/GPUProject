@@ -503,7 +503,7 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	cudaDeviceSynchronize();
 
 	// // We can now do stuff on d_decompData...
-	// d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
+	d_COAKernel<<<grid, block>>>(d_decompData, numOfRows, numOfCols);
 	// printf("thiccc got here 3\n");
 	cudaDeviceSynchronize();
 
