@@ -480,7 +480,11 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 
 
 	for(int i = 0; i < blocksNeeded; i++){
-		printf("CPU: Size of Chunk: %d is %lu\n", i, h_compData[i + THREADSPERBLOCK*i]);
+		printf("CPU: Size of Chunk: %d is %lu next is: %lu \n", i, h_compData[i + THREADSPERBLOCK*i], h_compData[i + THREADSPERBLOCK*i]);
+		for(int j = 1; j < 20; j++){
+			printf("%lx ", h_compData[i + THREADSPERBLOCK*i + j]);
+		}
+		printf("\n");
 		printf("CPU: Prefix and Not: %d is %d\n", h_dataNeeded[0][i], h_dataNeeded[1][i]);
 	}
 	// unsigned long compSizeCol1 = h_compData[0];
@@ -547,6 +551,10 @@ void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, i
 	// Each block is responsible for 1 chunk of THREADSPERBLOCK data...
 	// 0 1 -- 1008 | 1009 1010 - ... | ...
 	// So, cSize is in blockIdx.x * THREADSPERBLOCK
+	if(threadIdx.x == 0 && blockIdx.x == 5){
+		printf("This is Block: %d\n", blockIdx.x);
+		printUlongArray(compData, (THREADSPERBLOCK + 1) * blockIdx.x, 10);
+	}
 	d_decompressionHelperKernel(compData, compData[blockIdx.x * (THREADSPERBLOCK + 1)], dataNeeded[blockIdx.x], dataNeededPrefix[blockIdx.x] + blockIdx.x + 1, decompData);
 	
 	// Index of chunk i is at (numOfRows+1) * i
@@ -568,12 +576,12 @@ void d_decompressionHelperKernel(unsigned long* cData, unsigned long cSize, int 
 	__shared__ unsigned long wordIndex[THREADSPERBLOCK];
 	int id = threadIdx.x;
 
-	if(threadIdx.x == 0) {
-		printf("Block : %d\n", blockIdx.x);
-		printf("cSize : %lu\n", cSize);
-		printf("cDecompSize : %d\n", cDecompSize);
-		printf("start : %d\n", start);
-	}
+	// if(threadIdx.x == 0) {
+	// 	printf("Block : %d\n", blockIdx.x);
+	// 	printf("cSize : %lu\n", cSize);
+	// 	printf("cDecompSize : %d\n", cDecompSize);
+	// 	printf("start : %d\n", start);
+	// }
 
 	if(id < cSize){
 		int put = start + id;
@@ -617,7 +625,7 @@ void d_decompressionHelperKernel(unsigned long* cData, unsigned long cSize, int 
 			}
 		}else{
 			if(4096 == startForOut + threadIdx.x){
-				printf("Sad %lx %d %lu\n",tempWord, startForOut + id, wordIndex[id] + start);
+				printf("Sad %lx %d %lu %d %d\n",cData[start], startForOut + id, wordIndex[id], start, blockIdx.x);
 			}
 
 			decompDataOut[startForOut + threadIdx.x] = tempWord;
