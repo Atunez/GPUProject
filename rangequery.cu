@@ -64,7 +64,7 @@ int main(int argc, char * argv[])
 	// 1 0 0
 	// 0 0 1
 	char ** labels = (char **) Malloc(sizeof(11 * sizeof(char)) * rows);
-	unsigned long basic_values[rows];
+	unsigned long* basic_values = (unsigned long *) Malloc(sizeof(unsigned long) * rows);
 	
 	//printf("rows = %d, range = %d\n", rows, range);
 	//printf("cols[%d][%d]\n", numBins, numOfWords);
@@ -103,6 +103,8 @@ int main(int argc, char * argv[])
 			}
 		}
 	}
+
+	printf("Finished Reading File :) \n");
 
 	// Answers a query directly O(nk)
 	// k is length of bins of interest
@@ -186,7 +188,7 @@ int main(int argc, char * argv[])
     CHECK(cudaEventElapsedTime(&cpuMsecTime, start_cpu, stop_cpu));
 
 	printf("Time of range query on a CPU: %f msec\n", cpuMsecTime);
-	printf("Speedup: %f", cpuMsecTime/time_taken_gpu);
+	printf("Speedup: %f\n", cpuMsecTime/time_taken_gpu);
 
 		// for(k = 0; k < numOfWords; k++){
 		// 	printf("%lx \n", temp[k]);
