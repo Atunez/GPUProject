@@ -482,7 +482,7 @@ float d_rangequery(unsigned long** compData, unsigned long* result, int numOfCol
 	for(int i = 0; i < blocksNeeded; i++){
 		printf("CPU: Size of Chunk: %d is %lu next is: %lu \n", i, h_compData[i + THREADSPERBLOCK*i], h_compData[i + THREADSPERBLOCK*i]);
 		for(int j = 1; j < 20; j++){
-			printf("%lx ", h_compData[i + THREADSPERBLOCK*i + j]);
+			printf("%lx (%d)", h_compData[i + THREADSPERBLOCK*i + j], i + THREADSPERBLOCK*i + j);
 		}
 		printf("\n");
 		printf("CPU: Prefix and Not: %d is %d\n", h_dataNeeded[0][i], h_dataNeeded[1][i]);
@@ -555,7 +555,7 @@ void d_decompressionKernel(unsigned long* compData, unsigned long* decompData, i
 		printf("This is Block: %d\n", blockIdx.x);
 		printUlongArray(compData, (THREADSPERBLOCK + 1) * blockIdx.x, 10);
 	}
-	d_decompressionHelperKernel(compData, compData[blockIdx.x * (THREADSPERBLOCK + 1)], dataNeeded[blockIdx.x], dataNeededPrefix[blockIdx.x] + blockIdx.x + 1, decompData);
+	d_decompressionHelperKernel(compData, compData[blockIdx.x * (THREADSPERBLOCK + 1)], dataNeeded[blockIdx.x], blockIdx.x * (THREADSPERBLOCK + 1) + 1, decompData);
 	
 	// Index of chunk i is at (numOfRows+1) * i
 	// Size of chunk i is at compData[(numOfRows+1) * i]
@@ -624,10 +624,6 @@ void d_decompressionHelperKernel(unsigned long* cData, unsigned long cSize, int 
 				decompDataOut[startForOut + threadIdx.x] = 0;
 			}
 		}else{
-			if(4096 == startForOut + threadIdx.x){
-				printf("Sad %lx %d %lu %d %d\n",cData[start], startForOut + id, wordIndex[id], start, blockIdx.x);
-			}
-
 			decompDataOut[startForOut + threadIdx.x] = tempWord;
 		}
 	}
