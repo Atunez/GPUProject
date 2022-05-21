@@ -1,7 +1,190 @@
 #include "h_rangequery.h"
+#include "config.h"
 #include "wrappers.h"
 #include <stdlib.h>
 #include <stdio.h>
+
+
+long unsigned* compressNew(long unsigned* bitvector, int number, int &trackerOut)
+{
+    // worst case no copmression
+    long unsigned* answer = (long unsigned*) malloc(sizeof(long unsigned) * number); 
+    int tracker = 0;
+    //answer[0] = 0;
+    int i;
+    for(i = 0; i < number; i++){
+        // we should do the compression here...
+        // all the numbers in bitvector are 63 bit numbers..
+        int isfill = 1;
+        int j = 0;
+        long unsigned start = 0;
+        for(; j < 63; j++){
+            long unsigned toshift = bitvector[i];
+            long unsigned consider = (toshift >> j) & 1;
+            if(j == 0){
+                start = consider;
+                continue;
+            }
+            if(consider != start){
+                isfill = 0;
+                break;
+            }
+        }
+        
+        
+        // tracker should keep track of where we are going to insert next 
+        
+        if(isfill){
+            // fill atom
+            // has the form X|Y|Z, where X=1, Y= 0 or 1 and Z is count
+            long unsigned lastAnswer;
+            // if we are at the start then we can't go anywhere...
+            if(i == 0){
+                lastAnswer = 0x0;
+            }else{
+                // but otherwise, check the previous slot.
+                // if i = 2, then answer[0] = 2, so this would look at 1
+                lastAnswer = answer[tracker-1];
+            }
+            if(lastAnswer >> 63){
+                // if the last was a fill, then we need to do more work :(
+                // if they have the same fill then just increment...
+                if(!((lastAnswer >> 62) & 1 ^ (bitvector[i] >> 62) & 1)){
+                    // we will assume that we don't actually overflow here...
+                    answer[tracker-1]++;
+                    // we don't add anything new
+                    continue;
+                }else{
+                    // fresh insert....
+                    long unsigned toput = 0x8000000000000001;
+                    toput |= (bitvector[i] & 0x1) << 62; // either 0 or 1...
+                    answer[tracker] = toput;
+                }
+                
+            }else{
+                long unsigned toput = 0x8000000000000001;
+                toput |= (bitvector[i] & 0x1) << 62; // either 0 or 1...
+                answer[tracker] = toput;
+            }
+
+        }else{
+            // literal atom
+            // and is for safety, shouldn't be needed....
+            answer[tracker] = bitvector[i] & 0x7fffffffffffffff;
+        }
+        //printf("At i: %d, last thing is: %lx\n", i, answer[answer[0]]);
+        tracker++;
+    }
+    trackerOut = tracker;
+    return answer;
+}
+
+
+long unsigned** compressFullColumn(long unsigned* bitvector, int sizeOfVector){
+    // Given a vector of size n divide it into compressed 1D version....
+    int newCols = ceil( (1.0 * sizeOfVector) / THREADSPERBLOCK);
+    // This is slow :^)
+    // We move though... So no judging zone...
+    // At worse, we do no compression...
+    // We will linearize the data here... but it goes from 1D -> 2D -> 1D
+    long unsigned * cData = (long unsigned *) Malloc(sizeof(long unsigned) * newCols * THREADSPERBLOCK);
+    long unsigned * cSize = (long unsigned *) Malloc(sizeof(long unsigned) * newCols);
+    long unsigned * cSizeScan = (long unsigned *) Malloc(sizeof(long unsigned) * newCols);
+    long unsigned cChunkSize = newCols; // This will get optimized out but we move...
+
+    // Data Holder...
+    long unsigned * emptySize = (long unsigned *) Malloc(sizeof(long unsigned) * THREADSPERBLOCK);
+    long unsigned ** cDataHolder = (long unsigned **) Malloc(sizeof(emptySize) * newCols);
+    for(int i = 0; i < newCols; i++){
+        int broke = 0;
+        for(int j = 0; j < THREADSPERBLOCK; j++){
+            if(i * THREADSPERBLOCK + j == sizeOfVector){
+                broke = 1;
+                break;
+            }
+            cDataHolder[i][j] = bitvector[i * THREADSPERBLOCK + j];
+        }
+        if(broke)
+            break;
+    }
+
+    // Start on decompression....
+    int completeCounter = 0;
+    for(int i = 0; i < newCols; i++){
+        int amountOfData = 0;
+        int number = 0;
+        if(i+1 == newCols){
+            number = sizeOfVector;
+        }else{
+            sizeOfVector -= THREADSPERBLOCK;
+            number = THREADSPERBLOCK;
+        }
+        // Compress a col segment...
+        long unsigned * compressedCol = compressNew(cDataHolder[i], number, amountOfData);
+        for(int j = 0; j < THREADSPERBLOCK; j++){
+            // Put it in...
+            cData[completeCounter] = compressedCol[j];
+            completeCounter++;
+        }
+        cSize[i] = number;
+        cSizeScan[i] = completeCounter;
+    }
+
+    long unsigned ** output = (long unsigned **) Malloc(4 * sizeof(long unsigned *));
+
+    output[0] = cData;
+    output[1] = cSize;
+    output[2] = cSizeScan;
+    output[3] = &cChunkSize;
+
+    return output;
+}
+
+long unsigned ** compressMultipleRows(long unsigned** bitVectors, int sizeOfBitVectors, int numberOfBitVectors){
+    // This will just call compressFullColumn numberOfBitVector times and flatten them and combine them....
+
+    // Need to Malloc a lot of data....
+    int ratio = ceil(sizeOfBitVectors/(1.0*THREADSPERBLOCK));
+
+    // Each column will need ratio * THREADSPERBLOCK space... but then we need numOfBV of those...
+    long unsigned * cData = (long unsigned *) Malloc(ratio * numberOfBitVectors * sizeof(long unsigned) * THREADSPERBLOCK);
+    long unsigned * cSize = (long unsigned *) Malloc(ratio * sizeof(long unsigned) * numberOfBitVectors);
+    long unsigned * cSizeScan = (long unsigned *) Malloc(ratio * sizeof(long unsigned) * numberOfBitVectors);
+    long unsigned cChunkSize = 0;
+
+    int counterForcData = 0;
+    int counterForcSize = 0;
+    for(int i = 0; i < numberOfBitVectors; i++){
+        long unsigned ** compressOneVector = compressFullColumn(bitVectors[i], sizeOfBitVectors);
+        for(int j = 0; j < compressOneVector[2][compressOneVector[3][0] - 1]; j++){
+            // This loop goes through everything... 
+            cData[counterForcData] = compressOneVector[0][j];
+            if(j < compressOneVector[3][0]){
+                cSize[counterForcSize] = compressOneVector[1][j];
+                cSizeScan[counterForcSize] = compressOneVector[2][j];
+                counterForcSize++;
+            }
+            counterForcData++;
+        }
+        if(cChunkSize == 0){
+            cChunkSize = compressOneVector[3][0];
+        }else{
+            if(cChunkSize != compressOneVector[3][0]){
+                printf("Inconsistent? \n");
+                exit(0);
+            }
+        }
+    }
+
+    long unsigned ** output = (long unsigned **) Malloc(4 * sizeof(long unsigned *));
+
+    output[0] = cData;
+    output[1] = cSize;
+    output[2] = cSizeScan;
+    output[3] = &cChunkSize;
+
+    return output; 
+}
 
 long unsigned* compress(long unsigned* bitvector, int number)
 {
@@ -173,6 +356,16 @@ void testCompressDecompress()
 					 0x1ffffffffffffff1};
     int number = 7;
     testCompressDecompress(randomnumbers, number);
+    int numOfElements = 0;
+    long unsigned * t1 = compressNew(randomnumbers, number, numOfElements);
+    long unsigned * t2 = compress(randomnumbers, number);
+    for(int i = 0; i < numOfElements; i++){
+        if(t2[i+1] != t1[i]){
+            printf("Sad ... %d %lx %lx\n", i, t2[i+1], t1[i]);
+            exit(0);
+        }
+    }
+    printf("Done\n");
 }
 
 void testCompressDecompress(unsigned long * bitVector, int size){ 

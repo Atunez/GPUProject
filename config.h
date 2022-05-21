@@ -1,2 +1,2 @@
-#define THREADSPERBLOCK 1008
+#define THREADSPERBLOCK 1024
 #define ulong unsigned long 
